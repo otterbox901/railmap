@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shlex
+import shutil
 from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated
@@ -184,6 +185,8 @@ def calibrate(
     name: Annotated[str, typer.Option(help="profile name")] = "",
 ) -> None:
     """Sweep perftest QP counts with small messages, fit the message-rate knee and write a NIC profile."""
+    if not shutil.which(tool):
+        raise typer.BadParameter(f"{tool} not found; install perftest")
     topo = discover()
     nic = next((n for n in topo.nics if n.name == hca and n.port == port), None)
     if nic is None:

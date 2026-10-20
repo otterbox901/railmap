@@ -7,6 +7,9 @@ from rich.table import Table
 
 from railmap.placement.assign import Plan
 from railmap.placement.budget import Budget
+from railmap.probe.gdr_matrix import Cell
+from railmap.probe.observe import Observation
+from railmap.probe.validate import Run
 from railmap.topology.model import PathClass, Topology, format_cpulist
 
 PATH_STYLE = {
@@ -128,3 +131,55 @@ def show_budget(b: Budget, console: Console) -> None:
         for r in b.recommendations:
             t.add_row(r.change, r.setting, str(r.qps_per_nic), str(r.max_nodes) if r.max_nodes is not None else "any")
         console.print(t)
+
+
+def show_observation(obs: Observation, console: Console) -> None:
+    t = Table(title=f"peak QPs per NIC ({'this command' if obs.mode == 'pid' else 'whole host, minus baseline'})")
+    t.add_column("NIC")
+    t.add_column("peak QPs")
+    for nic, n in sorted(obs.peak_per_nic.items()):
+        t.add_row(nic, str(n))
+    console.print(t)
+    console.print(f"peak total: {obs.peak_total} over {len(obs.timeline)} samples")
+    if not obs.peak_per_nic:
+        console.print("[yellow]no QPs seen[/] (no RDMA traffic, or `rdma` cannot see other users' QPs without root)")
+
+
+def show_gdr(cells: list[Cell], summary: dict[str, tuple[float, float, int]], console: Console) -> None:
+    gpus = sorted({c.gpu for c in cells})
+    nics = list(dict.fromkeys(c.nic for c in cells))
+    t = Table(title="GPUDirect RDMA bandwidth, Gb/s")
+    t.add_column("GPU")
+    for n in nics:
+        t.add_column(n)
+    for g in gpus:
+        row = []
+        for n in nics:
+            c = next(c for c in cells if c.gpu == g and c.nic == n)
+            bw = f"{c.bw_avg_gbps:.0f}" if c.bw_avg_gbps is not None else "fail"
+            row.append(f"[{PATH_STYLE[PathClass[c.path]]}]{bw}[/] {c.path}")
+        t.add_row(f"GPU{g}", *row)
+    console.print(t)
+    s = Table(title="by path class")
+    for col in ("path", "mean Gb/s", "min Gb/s", "pairs"):
+        s.add_column(col)
+    for p in sorted(summary, key=lambda p: PathClass[p]):
+        mean, low, n = summary[p]
+        s.add_row(p, f"{mean:.1f}", f"{low:.1f}", str(n))
+    console.print(s)
+
+
+def show_validation(runs: list[Run], console: Console) -> None:
+    t = Table(title="nccl-tests average bus bandwidth, GB/s")
+    for col in ("test", "variant", "avg busbw", "vs none", "exit"):
+        t.add_column(col)
+    base = {r.test: r.avg_busbw for r in runs if r.variant == "none"}
+    for r in runs:
+        ref = base.get(r.test)
+        delta = f"{(r.avg_busbw / ref - 1):+.1%}" if r.avg_busbw and ref and r.variant != "none" else ""
+        avg = f"{r.avg_busbw:.2f}" if r.avg_busbw is not None else "-"
+        t.add_row(r.test, r.variant, avg, delta, str(r.exit_code))
+    console.print(t)
+    for r in runs:
+        if r.exit_code or r.avg_busbw is None:
+            console.print(f"[red]{r.test}/{r.variant} failed[/]: {r.command}\n{r.tail[-800:]}")

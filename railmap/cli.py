@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated
@@ -15,6 +16,11 @@ from railmap.emit import execwrap, report
 from railmap.placement import budget as budgetmod
 from railmap.placement.assign import Plan, assign
 from railmap.placement.connections import Job
+from railmap.probe import calibrate as cal
+from railmap.probe import gdr_matrix as gm
+from railmap.probe import observe as obsmod
+from railmap.probe import perftest
+from railmap.probe import validate as val
 from railmap.topology.discover import discover, placement_nics
 from railmap.topology.model import Topology
 
@@ -139,6 +145,121 @@ def exec_(
 ) -> None:
     """Bind this rank's CPUs, memory and env per the plan, then exec CMD. Use under torchrun/mpirun/srun."""
     execwrap.run(_plan(plan_file, topo_file, snapshot, variant), cmd, local_rank, isolate_gpu)
+
+
+@app.command()
+def observe(
+    cmd: Annotated[list[str] | None, typer.Argument(help="command to run, after --")] = None,
+    duration: Annotated[float | None, typer.Option(help="instead of a command, watch all QPs here for N s")] = None,
+    interval: Annotated[float, typer.Option(help="sampling interval in seconds")] = 0.5,
+    output: Annotated[Path | None, typer.Option("-o", "--output", help="write the observation as JSON")] = None,
+) -> None:
+    """Measure live QPs per NIC (`rdma resource show qp`) for a command, or for the whole host over --duration."""
+    if bool(cmd) == (duration is not None):
+        raise typer.BadParameter("give either a command after -- or --duration")
+    obs = obsmod.observe_command(cmd, interval) if cmd else obsmod.observe_host(duration, interval)
+    if output:
+        output.write_text(json.dumps(asdict(obs), indent=2) + "\n")
+    report.show_observation(obs, console)
+    if obs.exit_code:
+        raise typer.Exit(obs.exit_code)
+
+
+@app.command()
+def calibrate(
+    hca: Annotated[str, typer.Option(help="client-side RDMA device, e.g. mlx5_ib0")],
+    port: Annotated[int, typer.Option(help="device port")] = 1,
+    server: Annotated[str, typer.Option(help="host for the perftest server (over ssh); default: this host")] = "",
+    server_hca: Annotated[str | None, typer.Option(help="server-side device (default: --hca)")] = None,
+    connect_to: Annotated[
+        str | None, typer.Option(help="address the client dials (default: --server or 127.0.0.1)")
+    ] = None,
+    qps: Annotated[str, typer.Option(help="comma-separated QP counts to sweep")] = ",".join(map(str, cal.DEFAULT_QPS)),
+    size: Annotated[int, typer.Option(help="message size in bytes")] = 64,
+    duration: Annotated[int, typer.Option(help="seconds per point")] = 5,
+    tx_depth: Annotated[int, typer.Option(help="perftest -t per QP")] = 16,
+    tool: Annotated[str, typer.Option(help="perftest binary")] = "ib_write_bw",
+    gid_index: Annotated[int | None, typer.Option(help="RoCE v2 GID index (Ethernet only)")] = None,
+    output: Annotated[Path, typer.Option("-o", "--output", help="profile JSON to write")] = Path("profile.json"),
+    name: Annotated[str, typer.Option(help="profile name")] = "",
+) -> None:
+    """Sweep perftest QP counts with small messages, fit the message-rate knee and write a NIC profile."""
+    topo = discover()
+    nic = next((n for n in topo.nics if n.name == hca and n.port == port), None)
+    if nic is None:
+        console.print(f"[yellow]warning:[/] {hca}:{port} not found locally; profile will not be keyed to a NIC model")
+    client = perftest.Endpoint(hca, port, gid_index=gid_index)
+    srv = perftest.Endpoint(server_hca or hca, port, host=server, gid_index=gid_index)
+    points = cal.sweep(
+        srv,
+        client,
+        connect_to or server or "127.0.0.1",
+        [int(q) for q in qps.split(",")],
+        tool,
+        size,
+        duration,
+        tx_depth,
+        log=console.print,
+    )
+    profile = cal.to_profile(points, nic, hca, tool, size, name)
+    output.write_text(json.dumps(profile, indent=2) + "\n")
+    knee = profile["knee_qps"] if profile["knee_found"] else f"not reached (>{profile['knee_qps']})"
+    console.print(f"knee: {knee} QPs; profile written to {output}")
+
+
+@app.command("gdr-matrix")
+def gdr_matrix(
+    topo_file: TopoFile = None,
+    remote: Annotated[str, typer.Option(help="host for the receiving side (over ssh); default: loopback")] = "",
+    connect_to: Annotated[str | None, typer.Option(help="address the client dials")] = None,
+    size: Annotated[int, typer.Option(help="message size in bytes")] = 1 << 20,
+    duration: Annotated[int, typer.Option(help="seconds per pair")] = 3,
+    tool: Annotated[str, typer.Option(help="perftest binary built with CUDA")] = "ib_write_bw",
+    gid_index: Annotated[int | None, typer.Option(help="RoCE v2 GID index (Ethernet only)")] = None,
+    output: Annotated[Path | None, typer.Option("-o", "--output", help="write cells as JSON")] = None,
+) -> None:
+    """GPUDirect RDMA bandwidth from every GPU through every NIC, grouped by path class."""
+    if not perftest.supports_cuda(tool):
+        raise typer.BadParameter(f"{tool} is missing or was built without --use_cuda support")
+    topo = discover(topo_file=topo_file)
+    nics = placement_nics(topo)
+    cells = gm.measure(
+        topo,
+        topo.gpus,
+        nics,
+        remote,
+        connect_to or remote or "127.0.0.1",
+        tool,
+        size,
+        duration,
+        gid_index,
+        log=console.print,
+    )
+    if output:
+        output.write_text(json.dumps([asdict(c) for c in cells], indent=2) + "\n")
+    report.show_gdr(cells, gm.by_path_class(cells), console)
+
+
+@app.command()
+def validate(
+    launcher: Annotated[str, typer.Option(help='e.g. "mpirun -np 16 -H a:8,b:8 --bind-to none"')],
+    tests: Annotated[str, typer.Option(help="comma-separated nccl-tests binaries")] = "alltoall_perf,all_reduce_perf",
+    nccl_tests_dir: Annotated[Path | None, typer.Option(help="directory holding the binaries")] = None,
+    args: Annotated[str, typer.Option(help="nccl-tests arguments")] = "-b 8 -e 1G -f 4 -g 1",
+    variants: Annotated[str, typer.Option(help="none (no binding), best, worst")] = "none,best,worst",
+    topo_file: TopoFile = None,
+    output: Annotated[Path | None, typer.Option("-o", "--output", help="write runs as JSON")] = None,
+) -> None:
+    """Compare nccl-tests bus bandwidth across placements; every rank plans on its own node."""
+    exec_args = ["--topo-file", str(topo_file.resolve())] if topo_file else []
+    runs = []
+    for test in tests.split(","):
+        binary = str(nccl_tests_dir / test) if nccl_tests_dir else test
+        for variant in variants.split(","):
+            runs.append(val.run(launcher, variant, binary, shlex.split(args), exec_args, log=console.print))
+    if output:
+        output.write_text(json.dumps([asdict(r) for r in runs], indent=2) + "\n")
+    report.show_validation(runs, console)
 
 
 if __name__ == "__main__":

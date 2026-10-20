@@ -1,0 +1,8 @@
+{
+  "name": "prior-59pct-at-3000",
+  "kind": "prior",
+  "match": {},
+  "knee_qps": 3000,
+  "curve": [[3000, 0.41]],
+  "source": "Reported datum: all-to-all RDMA traffic loses 59% of the NIC's message rate at about 3,000 connections. Only one point is known, so loss below 3,000 QPs is reported as unknown. Run `railmap calibrate` on your NIC to replace this."
+}

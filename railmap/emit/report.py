@@ -1,0 +1,130 @@
+"""Human-readable tables for topology, plans and connection budgets."""
+
+from __future__ import annotations
+
+from rich.console import Console
+from rich.table import Table
+
+from railmap.placement.assign import Plan
+from railmap.placement.budget import Budget
+from railmap.topology.model import PathClass, Topology, format_cpulist
+
+PATH_STYLE = {
+    PathClass.PIX: "green",
+    PathClass.PXB: "green",
+    PathClass.PHB: "yellow",
+    PathClass.NODE: "yellow",
+    PathClass.SYS: "red",
+}
+
+
+def _messages(console: Console, warnings: list[str], notes: list[str]) -> None:
+    for w in warnings:
+        console.print(f"[bold red]warning:[/] {w}")
+    for n in notes:
+        console.print(f"[dim]note: {n}[/]")
+
+
+def show_topology(topo: Topology, console: Console) -> None:
+    console.print(f"[bold]source:[/] {topo.source}")
+    if not topo.gpus:
+        console.print("no NVIDIA GPUs found")
+    if not topo.nics:
+        console.print("no RDMA NICs found (/sys/class/infiniband is empty)")
+
+    if topo.gpus and topo.nics:
+        t = Table(title="GPU ↔ NIC path class")
+        t.add_column("GPU")
+        t.add_column("NUMA")
+        for j, _ in enumerate(topo.nics):
+            t.add_column(f"NIC{j}")
+        for g in topo.gpus:
+            cells = []
+            for n in topo.nics:
+                p = topo.path(g, n)
+                cells.append(f"[{PATH_STYLE[p]}]{p.name}[/]")
+            t.add_row(f"GPU{g.index} {g.bdf}", str(g.numa), *cells)
+        console.print(t)
+    elif topo.gpus:
+        t = Table(title="GPUs")
+        for col in ("GPU", "PCI", "NUMA", "name"):
+            t.add_column(col)
+        for g in topo.gpus:
+            t.add_row(str(g.index), g.bdf, str(g.numa), g.name)
+        console.print(t)
+
+    if topo.nics:
+        t = Table(title="RDMA NICs")
+        for col in ("", "NIC", "PCI", "NUMA", "link", "rate", "state", "board", "fw", "netdev"):
+            t.add_column(col)
+        for j, n in enumerate(topo.nics):
+            rate = f"{n.rate_gbps:g} Gb/s" if n.rate_gbps else ""
+            t.add_row(
+                f"NIC{j}",
+                n.label,
+                n.bdf or "virtual",
+                str(n.numa),
+                n.link_layer,
+                rate,
+                n.state,
+                n.board_id,
+                n.fw_ver,
+                ",".join(n.netdevs),
+            )
+        console.print(t)
+
+    t = Table(title="NUMA nodes")
+    t.add_column("node")
+    t.add_column("CPUs")
+    for node in topo.numa_nodes:
+        t.add_row(str(node.id), format_cpulist(node.cpus))
+    console.print(t)
+    _messages(console, topo.warnings(), topo.notes)
+
+
+def show_plan(plan: Plan, console: Console) -> None:
+    t = Table(title=f"placement ({plan.variant})")
+    for col in ("local rank", "GPU", "NIC", "path", "NUMA", "CPUs"):
+        t.add_column(col)
+    for r in plan.ranks:
+        style = {"PIX": "green", "PXB": "green", "SYS": "red"}.get(r.path or "", "yellow")
+        path = f"[{style}]{r.path}[/]" if r.path else "-"
+        t.add_row(
+            str(r.local_rank),
+            f"GPU{r.gpu} {r.gpu_bdf}",
+            ", ".join(r.nics) or "-",
+            path,
+            str(r.numa),
+            format_cpulist(r.cpus),
+        )
+    console.print(t)
+    _messages(console, plan.warnings, plan.notes)
+
+
+def show_budget(b: Budget, console: Console) -> None:
+    j = b.job
+    console.print(
+        f"[bold]job:[/] {j.nodes} nodes x {j.gpus_per_node} GPUs, {j.nics_per_node} NICs/node, "
+        f"{j.pattern} over {j.stack}{' (rail-only)' if j.rail_only else ''}"
+    )
+    style = {"ok": "green", "near": "yellow", "over": "red"}[b.status]
+    console.print(f"QPs per NIC (estimate): [bold {style}]{b.qps_per_nic}[/]  = {b.formula}")
+    console.print(
+        f"profile: {b.profile} ({b.profile_kind}), knee {b.knee_qps} QPs/NIC; "
+        f"per-GPU budget {b.per_gpu_budget} QPs; status [bold {style}]{b.status}[/]"
+    )
+    if b.relative_rate is not None:
+        bound = "at most " if b.beyond_curve else ""
+        console.print(f"expected small-message rate: {bound}{b.relative_rate:.0%} of peak")
+    elif b.profile_kind == "prior":
+        console.print("expected small-message rate: unknown below the prior's datum; calibrate this NIC")
+    console.print(
+        "nodes before the knee: " + (f"{b.max_nodes}" if b.max_nodes is not None else "never (QPs do not grow)")
+    )
+    if b.recommendations:
+        t = Table(title="ways to cut QPs per NIC")
+        for col in ("change", "setting", "QPs/NIC", "nodes before knee"):
+            t.add_column(col)
+        for r in b.recommendations:
+            t.add_row(r.change, r.setting, str(r.qps_per_nic), str(r.max_nodes) if r.max_nodes is not None else "any")
+        console.print(t)

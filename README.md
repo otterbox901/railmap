@@ -53,6 +53,26 @@ another machine, use `show --save topo.json` there, then `plan --snapshot topo.j
 | `--rail-only` | hierarchical all-to-all: RDMA to same-rail peers, NVLink forwarding |
 | `--profile` | NIC profile from `railmap calibrate` (default: shipped profiles, else the prior) |
 
+### UI
+
+```bash
+uv run railmap ui                           # http://localhost:8765/, opens a browser tab
+uv run railmap ui --snapshot topo.json      # plan offline for another machine
+```
+
+The page has four views:
+
+- **Topology:** the GPU×NIC path-class matrix, NICs and NUMA nodes.
+- **Placement:** a diagram of each rank's GPU, NIC and CPUs (best or worst variant), each rank's environment, and a
+  `plan.json` download.
+- **Connection budget:** QPs per NIC as the job grows, against the NIC profile's knee, with the settings that would
+  lower it.
+- **Campaign results:** everything under `--results` (default `results/`): the GDR matrix, the QP knee, the model
+  against observed QPs, and placement validation.
+
+To plan offline, drop a `show --save` JSON or an NCCL topology XML onto the page. The server listens on 127.0.0.1;
+from a remote node, run `ssh -L 8765:localhost:8765 <node>` and open the same URL.
+
 ### What `exec` sets
 
 | variable | value |
@@ -108,6 +128,7 @@ railmap/
   emit/       env vars, srun mask, exec wrapper, tables
   probe/      observe (rdma res show qp), calibrate (perftest -q sweep), GDR matrix, nccl-tests validation
   profiles/   NIC profiles; prior.json until something is measured
+  ui/         `railmap ui`: stdlib HTTP server and a single self-contained page (no build step, no CDN)
 ```
 
 - **Path classes** use the `nvidia-smi topo -m` legend. They come from each device's PCI ancestor chain.

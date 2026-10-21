@@ -1,0 +1,1253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>railmap</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 2v12M13 2v12M3 5h10M3 11h10' stroke='%232a78d6' stroke-width='2' fill='none'/%3E%3C/svg%3E">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f3f2ee;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #7a7873;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11, 11, 11, .10);
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --accent: #2a78d6;
+  --seq-lo: #cde2fb; --seq-hi: #0d366b; --heat-ink-lo: #0b0b0b; --heat-ink-hi: #ffffff;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #222220;
+    --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, .10);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --accent: #3987e5;
+    --seq-lo: #0d366b; --seq-hi: #86b6ef; --heat-ink-lo: #f0efec; --heat-ink-hi: #0b0b0b;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #222220;
+  --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, .10);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --accent: #3987e5;
+  --seq-lo: #0d366b; --seq-hi: #86b6ef; --heat-ink-lo: #f0efec; --heat-ink-hi: #0b0b0b;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 var(--sans); }
+code, .mono { font-family: var(--mono); font-size: .92em; }
+h2, h3, p { margin: 0; }
+button, input, select { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+
+/* header */
+.top { position: sticky; top: 0; z-index: 5; background: color-mix(in oklab, var(--page) 88%, transparent);
+  backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
+.top-in { max-width: 1240px; margin: 0 auto; padding: 10px 24px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+.brand { display: flex; align-items: center; gap: 8px; font: 700 15px var(--mono); letter-spacing: -.01em; padding-bottom: 10px; }
+.brand svg { color: var(--accent); }
+.src { margin-left: auto; display: flex; align-items: center; gap: 8px; padding-bottom: 10px; min-width: 0; }
+.pill { display: inline-flex; align-items: center; gap: 6px; max-width: 340px; padding: 3px 10px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-2); font: 12px var(--mono);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); flex: none; }
+.pill.offline .dot { background: var(--s4); }
+.tabs { order: 3; flex-basis: 100%; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.tabs button { border: 0; background: none; padding: 8px 12px 10px; color: var(--ink-2); cursor: pointer; white-space: nowrap;
+  border-bottom: 2px solid transparent; font-weight: 500; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border); color: var(--ink); font-size: 13px; white-space: nowrap; }
+.btn:hover { background: var(--surface-2); }
+.btn.ghost { background: none; }
+.btn.icon { padding: 6px 9px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* layout */
+main { max-width: 1240px; margin: 0 auto; padding: 24px 24px 64px; }
+.head { margin-bottom: 16px; }
+.head h2 { font-size: 20px; font-weight: 650; letter-spacing: -.01em; }
+.head p { color: var(--ink-2); margin-top: 2px; max-width: 75ch; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-top: 16px; min-width: 0; }
+.card > header { margin-bottom: 12px; }
+.card h3 { font-size: 14px; font-weight: 650; }
+.card > header p { color: var(--ink-2); font-size: 13px; margin-top: 2px; }
+.split { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; }
+.split > .card { margin-top: 16px; }
+.scroll { overflow-x: auto; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.spacer { flex: 1; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.tile .label { color: var(--ink-2); font-size: 12.5px; }
+.tile .value { font-size: 26px; font-weight: 650; letter-spacing: -.02em; margin-top: 2px; display: flex; align-items: center; gap: 8px; }
+.tile .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; overflow-wrap: anywhere; }
+.tile.hero .value { font-size: 48px; line-height: 1.05; }
+.tile.text .value { font-size: 20px; min-height: 34px; }
+.status-ic { width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 15px; font-weight: 800;
+  color: #fff; flex: none; }
+.status-ic.ok { background: var(--good); } .status-ic.near { background: var(--warning); color: #0b0b0b; } .status-ic.over { background: var(--critical); }
+
+.msgs { display: grid; gap: 6px; margin: 0 0 12px; }
+.msg { display: flex; gap: 8px; align-items: baseline; padding: 8px 12px; border-radius: 8px; font-size: 13px; }
+.msg.warn { background: color-mix(in oklab, var(--critical) 10%, var(--surface)); border: 1px solid color-mix(in oklab, var(--critical) 30%, transparent); }
+.msg.note { color: var(--ink-2); background: var(--surface-2); }
+.msg b { flex: none; }
+
+.empty { text-align: center; padding: 40px 16px; color: var(--ink-2); }
+.empty h3 { color: var(--ink); font-size: 16px; margin-bottom: 6px; }
+.empty p { max-width: 60ch; margin: 0 auto 6px; }
+
+/* tables */
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.tbl th { text-align: left; font-weight: 600; color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em;
+  padding: 6px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+.tbl td { padding: 7px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+.tbl tr:last-child td { border-bottom: 0; }
+.tbl td.num, .tbl th.num { text-align: right; }
+.tbl tr.sel td { background: color-mix(in oklab, var(--accent) 10%, var(--surface)); }
+.tbl tr.click { cursor: pointer; }
+.tbl tr.click:hover td { background: var(--surface-2); }
+.tbl tr.click.sel:hover td { background: color-mix(in oklab, var(--accent) 14%, var(--surface)); }
+.dim { color: var(--muted); }
+.key { display: inline-block; width: 14px; height: 2px; border-radius: 1px; background: var(--c); vertical-align: middle; margin-right: 8px; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--c); vertical-align: -1px; margin-right: 6px; }
+
+/* path classes */
+.pc-PIX { --tone: var(--good); --amt: 28%; }
+.pc-PXB { --tone: var(--good); --amt: 14%; }
+.pc-PHB { --tone: var(--warning); --amt: 30%; }
+.pc-NODE { --tone: var(--serious); --amt: 30%; }
+.pc-SYS { --tone: var(--critical); --amt: 24%; }
+.pc { background: color-mix(in oklab, var(--tone) var(--amt), var(--surface)); }
+.tag { display: inline-block; padding: 1px 7px; border-radius: 6px; font: 600 11.5px var(--mono); }
+.matrix { border-collapse: separate; border-spacing: 2px; font-variant-numeric: tabular-nums; }
+.matrix th { font-weight: 500; font-size: 12px; color: var(--ink-2); padding: 4px 6px; text-align: center; vertical-align: bottom; }
+.matrix th.row { text-align: left; white-space: nowrap; }
+.matrix th .nm { display: block; font: 11px var(--mono); color: var(--muted); max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.matrix th.unused { opacity: .5; }
+.matrix td { min-width: 58px; height: 36px; text-align: center; font: 600 12px var(--mono); border-radius: 4px; cursor: default; }
+.matrix td:hover, .matrix td:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 12.5px; color: var(--ink-2); }
+.legend > span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* placement diagram */
+.diagram { display: block; margin: 0 auto; height: auto; font-family: var(--sans); }
+.diagram .col { fill: var(--surface-2); stroke: var(--border); }
+.diagram .col-title { font-weight: 650; font-size: 13px; fill: var(--ink); }
+.diagram .col-sub { font: 11px var(--mono); fill: var(--muted); }
+.diagram .node rect { fill: var(--surface); stroke: var(--axis); stroke-width: 1; }
+.diagram .gpu rect { stroke: var(--ink-2); }
+.diagram .node { cursor: pointer; transition: opacity .15s; }
+.diagram .node.idle { opacity: .45; cursor: default; }
+.diagram .n-title { font-weight: 650; font-size: 12px; fill: var(--ink); }
+.diagram .n-badge { font-weight: 600; font-size: 10.5px; fill: var(--ink-2); }
+.diagram .n-mono { font: 10.5px var(--mono); fill: var(--ink-2); }
+.diagram .link { fill: none; stroke: var(--tone); stroke-width: 3; stroke-linecap: round; transition: opacity .15s; }
+.diagram .link.secondary { stroke-width: 1.5; }
+.diagram .pill rect { fill: var(--surface); stroke: var(--tone); stroke-width: 1.5; }
+.diagram .pill text { font: 600 10px var(--mono); fill: var(--ink); }
+.diagram .pill { transition: opacity .15s; }
+.diagram.focusing .link:not(.hot), .diagram.focusing .pill:not(.hot) { opacity: .1; }
+.diagram.focusing .node:not(.hot) { opacity: .4; }
+
+pre.env { margin: 0; padding: 12px 14px; background: var(--surface-2); border-radius: 8px; font: 12px/1.6 var(--mono);
+  overflow-x: auto; white-space: pre; }
+.env-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+/* segmented + form */
+.seg { display: inline-flex; padding: 2px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--border); }
+.seg button { border: 0; background: none; padding: 5px 12px; border-radius: 7px; cursor: pointer; color: var(--ink-2); font-size: 13px; white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgba(0,0,0,.06); font-weight: 550; }
+.field { display: grid; gap: 4px; font-size: 13px; }
+.field > span { color: var(--ink-2); font-weight: 500; }
+.field small { color: var(--muted); font: 11px var(--mono); }
+.field.inline { display: inline-flex; align-items: center; gap: 8px; }
+input[type="number"], select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--axis); background: var(--surface); min-width: 0; }
+input[type="number"] { width: 100%; font-variant-numeric: tabular-nums; }
+.field.inline input { width: 72px; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; cursor: pointer; }
+.check input { margin: 2px 0 0; accent-color: var(--accent); }
+.check small { display: block; color: var(--muted); }
+
+.budget { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 16px; align-items: start; }
+.budget form { margin-top: 0; display: grid; gap: 14px; position: sticky; top: 104px; }
+.budget form h3 { margin-bottom: -4px; }
+.nodes-row { display: grid; grid-template-columns: 88px 1fr; gap: 10px; align-items: center; }
+#bout { transition: opacity .15s; }
+#bout.loading { opacity: .6; }
+
+/* charts */
+.chart { width: 100%; min-height: 40px; }
+.plot { display: block; overflow: visible; font-family: var(--sans); }
+.plot .grid { stroke: var(--grid); stroke-width: 1; }
+.plot .axis { stroke: var(--axis); stroke-width: 1; }
+.plot .tick { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.plot .axis-label { font-size: 11.5px; fill: var(--ink-2); }
+.plot .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.plot .dot { stroke: var(--surface); stroke-width: 2; }
+.plot .ref { stroke: var(--ink-2); stroke-width: 1; }
+.plot .ref.subtle { stroke: var(--axis); }
+.plot .ref-label { font-size: 11.5px; fill: var(--ink-2); }
+.plot .band.over { fill: var(--critical); opacity: .07; }
+.plot .band.near { fill: var(--warning); opacity: .09; }
+.plot .band-label { font-size: 11px; fill: var(--ink-2); }
+.plot .cross line { stroke: var(--ink-2); stroke-width: 1; }
+.plot .hit { fill: transparent; }
+.plot .bar-label { font-size: 12px; fill: var(--ink); font-variant-numeric: tabular-nums; }
+.plot .cat-label { font-size: 12px; fill: var(--ink-2); }
+.plot .stem { stroke: var(--axis); stroke-width: 2; }
+.plot:focus-visible { outline-offset: 4px; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 12.5px; color: var(--ink-2); margin-bottom: 8px; }
+.caption { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+details.tv { margin-top: 10px; }
+details.tv summary { cursor: pointer; color: var(--ink-2); font-size: 12.5px; }
+details.tv[open] summary { margin-bottom: 8px; }
+
+.heat { border-collapse: separate; border-spacing: 2px; font-variant-numeric: tabular-nums; }
+.heat th { font-weight: 500; font-size: 12px; color: var(--ink-2); padding: 4px 6px; white-space: nowrap; }
+.heat th .nm { display: block; font: 11px var(--mono); color: var(--muted); max-width: 92px; overflow: hidden; text-overflow: ellipsis; }
+.heat td { min-width: 62px; height: 40px; text-align: center; border-radius: 4px; color: var(--heat-ink-lo); line-height: 1.15;
+  background: color-mix(in oklab, var(--seq-hi) calc(var(--t) * 100%), var(--seq-lo)); }
+.heat td[data-hi] { color: var(--heat-ink-hi); }
+.heat td b { display: block; font-size: 13px; }
+.heat td small { font: 10px var(--mono); opacity: .85; }
+.heat td.fail { background: var(--surface-2); color: var(--muted); }
+.heat td:hover, .heat td:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.ramp { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ramp i { display: block; width: 160px; height: 10px; border-radius: 3px; background: linear-gradient(90deg, var(--seq-lo), var(--seq-hi)); }
+
+#tip { position: fixed; z-index: 20; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; font-size: 12.5px; box-shadow: 0 6px 20px rgba(0,0,0,.14); max-width: 320px; }
+#tip .tip-title { color: var(--ink-2); margin-bottom: 4px; }
+#tip .tip-row { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+#tip .tip-row b { font-variant-numeric: tabular-nums; }
+#tip .tip-row span { color: var(--ink-2); white-space: normal; }
+#tip .key { margin-right: 2px; }
+#toast { position: fixed; z-index: 30; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--page);
+  padding: 8px 14px; border-radius: 8px; font-size: 13px; max-width: calc(100vw - 32px); }
+#drop { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: color-mix(in oklab, var(--page) 80%, transparent); }
+#drop > div { padding: 32px 40px; border: 2px dashed var(--accent); border-radius: 16px; background: var(--surface); font-size: 15px; }
+
+@media (max-width: 900px) {
+  .split, .budget { grid-template-columns: minmax(0, 1fr); }
+  .budget form { position: static; }
+}
+@media (max-width: 640px) {
+  .top-in { padding: 8px 16px 0; }
+  main { padding: 16px 16px 48px; }
+  .src .pill { max-width: 150px; }
+  .src .btn .long { display: none; }
+  .tile.hero .value { font-size: 40px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2v12M13 2v12M3 5h10M3 11h10" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+      railmap
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button role="tab" data-tab="topology">Topology</button>
+      <button role="tab" data-tab="placement">Placement</button>
+      <button role="tab" data-tab="budget">Connection budget</button>
+      <button role="tab" data-tab="results">Campaign results</button>
+    </nav>
+    <div class="src">
+      <span id="src-pill" class="pill"><span class="dot"></span><span id="src-text">loading…</span></span>
+      <button id="reset-btn" class="btn ghost" hidden title="Back to the topology railmap ui started with">Reset</button>
+      <button id="load-btn" class="btn" title="Load a `railmap show --save` JSON or an NCCL topology XML"><span>Load<span class="long"> topology</span>…</span></button>
+      <input type="file" id="file" accept=".json,.xml,application/json,text/xml" hidden>
+      <button id="theme-btn" class="btn icon" aria-label="Toggle light or dark theme" title="Toggle theme">◐</button>
+    </div>
+  </div>
+</header>
+<main>
+  <section id="tab-topology" role="tabpanel"></section>
+  <section id="tab-placement" role="tabpanel" hidden></section>
+  <section id="tab-budget" role="tabpanel" hidden></section>
+  <section id="tab-results" role="tabpanel" hidden></section>
+</main>
+<div id="tip" role="tooltip" hidden></div>
+<div id="toast" role="status" hidden></div>
+<div id="drop" hidden><div>Drop a <code>railmap show --save</code> JSON or an NCCL topology XML</div></div>
+
+<script>
+'use strict';
+
+/* ---------- helpers ---------- */
+const $ = (sel, root = document) => root.querySelector(sel);
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+function fill(el, attrs, kids, isSvg) {
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
+    else if (k === 'class' && !isSvg) el.className = v;
+    else el.setAttribute(k, v === true ? '' : String(v));
+  }
+  for (const kid of kids.flat(Infinity)) {
+    if (kid == null || kid === false) continue;
+    el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  }
+  return el;
+}
+const h = (tag, attrs, ...kids) => fill(document.createElement(tag), attrs, kids, false);
+const s = (tag, attrs, ...kids) => fill(document.createElementNS(SVGNS, tag), attrs, kids, true);
+
+const nf = new Intl.NumberFormat('en-US');
+const fmtInt = v => (v == null ? '–' : nf.format(Math.round(v)));
+const fmtNum = (v, d = 1) => (v == null ? '–' : nf.format(+v.toFixed(d)));
+const fmtCompact = v => (v >= 1e6 ? `${+(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `${+(v / 1e3).toFixed(v >= 1e4 ? 0 : 1)}K` : `${+v.toFixed(2)}`);
+const pct = v => `${Math.round(v * 100)}%`;
+const signedPct = v => `${v >= 0 ? '+' : '−'}${Math.abs(v * 100).toFixed(1)}%`;
+const shortLabel = label => label.split(/[:(]/)[0].trim();
+const trunc = (str, n) => (str.length > n ? str.slice(0, n - 1) + '…' : str);
+
+function cpulist(cpus) {
+  const v = [...new Set(cpus)].sort((a, b) => a - b), out = [];
+  for (let i = 0; i < v.length;) {
+    let j = i;
+    while (j + 1 < v.length && v[j + 1] === v[j] + 1) j++;
+    out.push(i === j ? `${v[i]}` : `${v[i]}-${v[j]}`);
+    i = j + 1;
+  }
+  return out.join(',');
+}
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const body = await r.json().catch(() => ({ error: `${r.status} ${r.statusText}` }));
+  if (!r.ok) throw new Error(body.error || r.statusText);
+  return body;
+}
+
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.hidden = true), 3500);
+}
+
+async function copy(text, msg) {
+  try { await navigator.clipboard.writeText(text); toast(msg); } catch { toast('Copy failed: select the text instead'); }
+}
+
+/* tooltip: content is built with DOM nodes, never innerHTML */
+function tipBody(title, rows) {
+  return h('div', {},
+    title && h('div', { class: 'tip-title' }, title),
+    rows.map(r => h('div', { class: 'tip-row' },
+      r.color && h('span', { class: 'key', style: `--c:${r.color}` }),
+      r.value != null && h('b', {}, r.value),
+      r.label && h('span', {}, r.label))));
+}
+function placeTip(x, y) {
+  const t = $('#tip'), r = t.getBoundingClientRect();
+  let left = x + 14, top = y + 14;
+  if (left + r.width > innerWidth - 8) left = x - r.width - 14;
+  if (top + r.height > innerHeight - 8) top = y - r.height - 14;
+  t.style.left = `${Math.max(8, left)}px`;
+  t.style.top = `${Math.max(8, top)}px`;
+}
+function showTip(node, x, y) { const t = $('#tip'); t.replaceChildren(node); t.hidden = false; placeTip(x, y); }
+function hideTip() { $('#tip').hidden = true; }
+function attachTip(el, content) {
+  el.addEventListener('pointerenter', e => showTip(content(), e.clientX, e.clientY));
+  el.addEventListener('pointermove', e => placeTip(e.clientX, e.clientY));
+  el.addEventListener('pointerleave', hideTip);
+  el.addEventListener('focus', () => { const r = el.getBoundingClientRect(); showTip(content(), r.left + r.width / 2, r.bottom - 10); });
+  el.addEventListener('blur', hideTip);
+}
+
+/* building blocks */
+/* prose with `code` spans: odd backtick-separated parts become <code> */
+const rich = text => String(text).split('`').map((part, i) => (i % 2 ? h('code', {}, part) : part));
+const head = (title, sub) => h('div', { class: 'head' }, h('h2', {}, title), sub && h('p', {}, rich(sub)));
+function card(title, sub, ...body) {
+  return h('section', { class: 'card' }, (title || sub) && h('header', {}, title && h('h3', {}, title), sub && h('p', {}, rich(sub))), body);
+}
+const tile = (label, value, sub, cls = '') => h('div', { class: `tile ${cls}` }, h('div', { class: 'label' }, label), h('div', { class: 'value' }, value), sub && h('div', { class: 'sub' }, sub));
+function messages(warnings = [], notes = []) {
+  if (!warnings.length && !notes.length) return null;
+  return h('div', { class: 'msgs' },
+    warnings.map(w => h('div', { class: 'msg warn' }, h('b', {}, '⚠ Warning'), h('span', {}, w))),
+    notes.map(n => h('div', { class: 'msg note' }, h('b', {}, 'Note'), h('span', {}, n))));
+}
+const empty = (title, ...lines) => h('div', { class: 'card empty' }, h('h3', {}, title), lines.filter(Boolean).map(l => h('p', {}, rich(l))));
+function table(cols, rows, opts = {}) {
+  return h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
+    h('thead', {}, h('tr', {}, cols.map(c => h('th', { class: c.num ? 'num' : null }, c.label ?? c)))),
+    h('tbody', {}, rows.map((r, i) => {
+      const tr = h('tr', opts.rowAttrs ? opts.rowAttrs(i) : {}, r.map((v, j) => h('td', { class: cols[j].num ? 'num' : null }, v)));
+      return tr;
+    }))));
+}
+function segmented(options, value, onPick, label) {
+  const g = h('div', { class: 'seg', role: 'group', 'aria-label': label });
+  for (const [v, text] of options) {
+    g.append(h('button', { type: 'button', 'aria-pressed': String(v === value), onclick: () => {
+      g.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+      g.querySelector(`[data-v="${v}"]`).setAttribute('aria-pressed', 'true');
+      onPick(v);
+    }, 'data-v': v }, text));
+  }
+  return g;
+}
+const pathTag = cls => (cls ? h('span', { class: `tag pc pc-${cls}` }, cls) : h('span', { class: 'dim' }, '–'));
+const PATHS = {
+  PIX: 'at most one PCIe switch',
+  PXB: 'several PCIe switches, no host bridge',
+  PHB: 'through a PCIe host bridge (the CPU)',
+  NODE: 'between host bridges of one NUMA node',
+  SYS: 'across the inter-socket link',
+};
+function pathLegend() {
+  return h('div', { class: 'legend' }, Object.entries(PATHS).map(([k, v]) => h('span', {}, pathTag(k), v)));
+}
+
+/* scales and axes */
+function logScale(d0, d1, r0, r1) {
+  const l0 = Math.log(d0), l1 = Math.log(d1);
+  const f = v => r0 + ((Math.log(v) - l0) / (l1 - l0 || 1)) * (r1 - r0);
+  f.inv = p => Math.exp(l0 + ((p - r0) / (r1 - r0)) * (l1 - l0));
+  return f;
+}
+function linScale(d0, d1, r0, r1) {
+  const f = v => r0 + ((v - d0) / (d1 - d0 || 1)) * (r1 - r0);
+  f.inv = p => d0 + ((p - r0) / (r1 - r0)) * (d1 - d0);
+  return f;
+}
+function logTicks(d0, d1, max = 8) {
+  const out = [];
+  for (let e = Math.floor(Math.log10(d0)); e <= Math.ceil(Math.log10(d1)); e++)
+    for (const k of [1, 2, 5]) {
+      const v = +(k * 10 ** e).toPrecision(12);
+      if (v >= d0 * 0.999 && v <= d1 * 1.001) out.push(v);
+    }
+  if (out.length <= max) return out;
+  const decades = out.filter(v => Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-9);
+  return decades.length >= 2 ? decades : [out[0], out.at(-1)];
+}
+function linTicks(d0, d1, n = 5) {
+  const raw = (d1 - d0) / n, mag = 10 ** Math.floor(Math.log10(raw || 1));
+  const step = [1, 2, 2.5, 5, 10].map(k => k * mag).find(v => v >= raw) || raw;
+  const out = [];
+  for (let v = Math.ceil(d0 / step) * step; v <= d1 + 1e-9; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+function axes(svg, { x, y, W, H, m, xTicks, yTicks, xFmt, yFmt, xLabel, yLabel }) {
+  const g = s('g', {});
+  for (const v of yTicks) {
+    const py = y(v);
+    g.append(s('line', { x1: m.l, x2: W - m.r, y1: py, y2: py, class: 'grid' }),
+      s('text', { x: m.l - 8, y: py + 4, 'text-anchor': 'end', class: 'tick' }, yFmt(v)));
+  }
+  for (const v of xTicks || []) {
+    const px = x(v);
+    g.append(s('line', { x1: px, x2: px, y1: H - m.b, y2: H - m.b + 4, class: 'axis' }),
+      s('text', { x: px, y: H - m.b + 17, 'text-anchor': 'middle', class: 'tick' }, xFmt(v)));
+  }
+  g.append(s('line', { x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, class: 'axis' }));
+  if (xLabel) g.append(s('text', { x: W - m.r, y: H - 3, 'text-anchor': 'end', class: 'axis-label' }, xLabel));
+  if (yLabel) g.append(s('text', { x: m.l, y: 12, class: 'axis-label' }, yLabel));
+  svg.append(g);
+}
+/* a bar with a 4px rounded data end and a square baseline end */
+function hbarPath(x0, y, w, t, r = 4) {
+  r = Math.min(r, w, t / 2);
+  return `M${x0},${y}h${w - r}a${r},${r} 0 0 1 ${r},${r}v${t - 2 * r}a${r},${r} 0 0 1 ${-r},${r}h${-(w - r)}z`;
+}
+function lineLegend(items) {
+  return h('div', { class: 'chart-legend' }, items.map(it => h('span', {}, h('span', { class: 'key', style: `--c:${it.color}` }), it.label)));
+}
+const tableView = (cols, rows) => h('details', { class: 'tv' }, h('summary', {}, 'Table view'), table(cols, rows));
+
+/* ---------- state ---------- */
+const S = {
+  tab: 'topology', topo: null,
+  plan: null, planError: null, variant: 'best', ranks: null, selRank: 0,
+  bq: {}, budget: null, budgetError: null, form: null,
+  camps: null, campName: null, camp: null, campError: null,
+};
+const TABS = ['topology', 'placement', 'budget', 'results'];
+
+async function loadTopology() {
+  S.topo = await api('/api/topology');
+  const pill = $('#src-pill');
+  const src = S.topo.source.replace(/^(\w+):.*[\\/]([^\\/]+)$/, '$1: $2');
+  const where = !S.topo.is_host ? 'offline' : /^(snapshot|upload):/.test(S.topo.source) ? 'snapshot' : 'this host';
+  $('#src-text').textContent = `${where} · ${src.replace(/^snapshot: /, '')}`;
+  pill.title = S.topo.source;
+  pill.classList.toggle('offline', !S.topo.is_host);
+  $('#reset-btn').hidden = S.topo.is_host;
+}
+async function loadPlan() {
+  const q = new URLSearchParams({ variant: S.variant });
+  if (S.ranks) q.set('ranks', S.ranks);
+  try { S.plan = await api(`/api/plan?${q}`); S.planError = null; } catch (e) { S.plan = null; S.planError = e.message; }
+}
+let budgetSeq = 0;
+async function loadBudget() {
+  const seq = ++budgetSeq;
+  $('#bout')?.classList.add('loading');
+  try {
+    const b = await api(`/api/budget?${new URLSearchParams(S.bq)}`);
+    if (seq !== budgetSeq) return false;
+    S.budget = b; S.budgetError = null;
+  } catch (e) {
+    if (seq !== budgetSeq) return false;
+    S.budgetError = e.message;
+  }
+  $('#bout')?.classList.remove('loading');
+  return true;
+}
+async function loadCampaigns() {
+  try { S.camps = await api('/api/campaigns'); } catch (e) { S.camps = { results: '', campaigns: [], error: e.message }; }
+  const names = S.camps.campaigns;
+  if (names.length) await loadCampaign(names.includes(S.campName) ? S.campName : names[0]);
+}
+async function loadCampaign(name) {
+  S.campName = name;
+  try { S.camp = await api(`/api/campaign?name=${encodeURIComponent(name)}`); S.campError = null; } catch (e) { S.camp = null; S.campError = e.message; }
+}
+
+async function reloadForTopology() {
+  try { await loadTopology(); } catch (e) { toast(e.message); return; }
+  S.ranks = null; S.selRank = 0; S.form = null;
+  delete S.bq.gpus_per_node; delete S.bq.nics_per_node;
+  $('#tab-budget').replaceChildren();
+  await Promise.all([loadPlan(), loadBudget()]);
+  render();
+}
+
+function showTab(name) {
+  S.tab = TABS.includes(name) ? name : 'topology';
+  for (const t of TABS) {
+    $(`#tab-${t}`).hidden = t !== S.tab;
+    $(`[data-tab="${t}"]`).setAttribute('aria-selected', String(t === S.tab));
+  }
+  if (location.hash !== `#${S.tab}`) history.replaceState(null, '', `#${S.tab}`);
+  render();
+}
+function render() {
+  hideTip();
+  if (!S.topo) return;
+  ({ topology: renderTopology, placement: renderPlacement, budget: renderBudget, results: renderResults })[S.tab]();
+}
+
+/* ---------- topology ---------- */
+function renderTopology() {
+  const t = S.topo, root = $('#tab-topology');
+  const used = t.nics.filter(n => n.placement).length;
+  const nicHead = (n, j) => h('th', { class: n.placement ? null : 'unused', title: n.label }, `NIC${j}`, h('span', { class: 'nm' }, n.label));
+  root.replaceChildren(
+    head('Node topology', 'GPUs, RDMA NICs and NUMA nodes, and how far each GPU is from each NIC on the PCI tree.'),
+    messages(t.warnings, t.notes),
+    h('div', { class: 'tiles' },
+      tile('GPUs', t.gpus.length, t.gpus[0]?.name || (t.gpus.length ? '' : 'none found')),
+      tile('RDMA NICs', t.nics.length, !t.nics.length ? 'none found' : used === t.nics.length ? 'all used for placement' : `${used} used for placement`),
+      tile('NUMA nodes', t.numa_nodes.length, t.numa_nodes.map(n => `${n.count} CPUs`).join(' · '))),
+  );
+  if (t.gpus.length && t.nics.length) {
+    const m = h('table', { class: 'matrix' },
+      h('thead', {}, h('tr', {}, h('th', { class: 'row' }, 'GPU'), h('th', {}, 'NUMA'), t.nics.map(nicHead))),
+      h('tbody', {}, t.gpus.map((g, i) => h('tr', {},
+        h('th', { class: 'row' }, `GPU${g.index}`, h('span', { class: 'nm' }, g.bdf)),
+        h('th', {}, g.numa < 0 ? '?' : g.numa),
+        t.paths[i].map((p, j) => {
+          const td = h('td', { class: `pc pc-${p}`, tabindex: 0 }, p);
+          attachTip(td, () => tipBody(`GPU${g.index} → ${t.nics[j].label}`, [{ value: p, label: PATHS[p] }]));
+          return td;
+        })))));
+    root.append(card('GPU ↔ NIC path class', 'Lower is closer; same legend as nvidia-smi topo -m. Dimmed NICs are left out of placement.', h('div', { class: 'scroll' }, m), pathLegend()));
+  } else if (!t.gpus.length) {
+    root.append(empty('No NVIDIA GPUs in this topology',
+      'Load a topology from a GPU node: run `railmap show --save topo.json` there, then use Load topology (or drop the file here).',
+      'An NCCL topology XML such as /opt/microsoft/ndv5-topo.xml works too.'));
+  }
+  if (t.nics.length) {
+    root.append(card('RDMA NICs', null, table(
+      ['', 'NIC', 'PCI', 'NUMA', 'Link', { label: 'Rate', num: true }, 'State', 'Board', 'Firmware', 'Netdev', 'Placement'],
+      t.nics.map((n, j) => [`NIC${j}`, h('span', { class: 'mono' }, n.label), h('span', { class: 'mono' }, n.bdf || 'virtual'), n.numa,
+        n.link_layer || h('span', { class: 'dim' }, '–'), n.rate_gbps ? `${n.rate_gbps} Gb/s` : h('span', { class: 'dim' }, '–'),
+        n.state || h('span', { class: 'dim' }, '–'), n.board_id || h('span', { class: 'dim' }, '–'), n.fw_ver || h('span', { class: 'dim' }, '–'),
+        n.netdevs.join(', ') || h('span', { class: 'dim' }, '–'), n.placement ? 'used' : h('span', { class: 'dim' }, 'left out')]))));
+  }
+  root.append(card('NUMA nodes', null, table(['Node', 'CPUs', { label: 'Count', num: true }],
+    t.numa_nodes.map(n => [n.id, h('span', { class: 'mono' }, n.cpus), n.count]))));
+}
+
+/* ---------- placement ---------- */
+function renderPlacement() {
+  const t = S.topo, root = $('#tab-placement');
+  const ranksInput = h('input', { type: 'number', min: 1, max: Math.max(1, t.gpus.length), value: S.ranks || t.gpus.length || 1,
+    onchange: async e => {
+      const v = Math.max(1, Math.min(t.gpus.length, +e.target.value || t.gpus.length));
+      S.ranks = v === t.gpus.length ? null : v;
+      S.selRank = 0;
+      await loadPlan();
+      render();
+    } });
+  root.replaceChildren(
+    head('Placement', 'Each local rank gets a GPU, its closest NIC(s), CPU cores from the GPU’s NUMA node, and that node’s memory.'),
+    h('div', { class: 'toolbar' },
+      segmented([['best', 'Best'], ['worst', 'Worst (validation control)']], S.variant, async v => {
+        S.variant = v; S.selRank = 0; await loadPlan(); render();
+      }, 'Plan variant'),
+      h('label', { class: 'field inline' }, h('span', {}, 'Local ranks'), ranksInput),
+      h('div', { class: 'spacer' }),
+      S.plan && h('button', { class: 'btn', onclick: downloadPlan }, 'Download plan.json'),
+      S.plan && h('button', { class: 'btn', onclick: () => copy(S.plan.slurm, 'srun flag copied') }, 'Copy srun --cpu-bind')),
+  );
+  if (S.variant === 'worst') {
+    root.append(h('p', { class: 'caption' }, rich('Deliberately bad: far NICs and CPUs on the other socket. `railmap validate` runs it as the control.')));
+  }
+  if (S.planError) {
+    root.append(empty('No plan for this topology', S.planError));
+    return;
+  }
+  const p = S.plan.plan;
+  const diagram = placementDiagram(t, p);
+  root.append(h('div', { style: 'margin-top:12px' }, messages(p.warnings, p.notes)), card(null, null, h('div', { class: 'scroll' }, diagram)));
+
+  const rows = p.ranks.map(r => [r.local_rank, h('span', {}, `GPU${r.gpu} `, h('span', { class: 'mono dim' }, r.gpu_bdf)),
+    h('span', { class: 'mono' }, r.nics.join(', ') || '–'), pathTag(r.path), r.numa, h('span', { class: 'mono' }, cpulist(r.cpus))]);
+  const rankTable = table(['Rank', 'GPU', 'NIC', 'Path', 'NUMA', 'CPUs'], rows, {
+    rowAttrs: i => ({ class: `click ${p.ranks[i].local_rank === S.selRank ? 'sel' : ''}`, tabindex: 0, 'data-rank': p.ranks[i].local_rank }),
+  });
+  const envHolder = h('div', {}, envCard());
+  rankTable.querySelectorAll('tr[data-rank]').forEach(tr => {
+    const r = +tr.dataset.rank;
+    const pick = () => {
+      S.selRank = r;
+      rankTable.querySelectorAll('tr[data-rank]').forEach(x => x.classList.toggle('sel', +x.dataset.rank === r));
+      envHolder.replaceChildren(envCard());
+    };
+    tr.addEventListener('click', pick);
+    tr.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
+    tr.addEventListener('pointerenter', () => focusRank(diagram, r));
+    tr.addEventListener('pointerleave', () => focusRank(diagram, null));
+  });
+  root.append(h('div', { class: 'split' }, card('Ranks', 'Select a rank to see its environment.', rankTable), envHolder));
+}
+function envCard() {
+  return card(`Environment for local rank ${S.selRank}`, '`railmap exec` sets these, binds the CPUs and NUMA memory, then execs your command.', envBlock());
+}
+function envBlock() {
+  const text = S.plan.env[S.selRank] || '';
+  return h('div', {},
+    h('pre', { class: 'env' }, text),
+    h('div', { class: 'env-actions' },
+      h('button', { class: 'btn', onclick: () => copy(text, `rank ${S.selRank} exports copied`) }, 'Copy exports'),
+      h('button', { class: 'btn ghost', onclick: () => copy(`srun ${S.plan.slurm}`, 'srun flag copied') }, 'Copy srun flag')),
+    h('p', { class: 'caption mono', style: 'overflow-wrap:anywhere' }, `srun ${S.plan.slurm}`));
+}
+function downloadPlan() {
+  const blob = new Blob([JSON.stringify(S.plan.plan, null, 2) + '\n'], { type: 'application/json' });
+  const a = h('a', { href: URL.createObjectURL(blob), download: `plan-${S.plan.plan.variant}.json` });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+/* fade everything except the elements whose ranks match `pred` (null clears the focus) */
+function focusWhere(svg, pred) {
+  svg.classList.toggle('focusing', !!pred);
+  svg.querySelectorAll('[data-rank]').forEach(el => {
+    const ranks = el.dataset.rank.split(' ').filter(Boolean).map(Number);
+    el.classList.toggle('hot', !!pred && pred(ranks, el));
+  });
+}
+const focusRank = (svg, rank) => focusWhere(svg, rank == null ? null : ranks => ranks.includes(rank));
+
+function placementDiagram(t, p) {
+  const BW = 112, GH = 62, NH = 46, GAP = 14, PAD = 16, HEAD = 50, LINK = 132, COLGAP = 18;
+  const numaIds = t.numa_nodes.map(n => n.id);
+  const colOf = numa => (numaIds.includes(numa) ? numa : null);
+  const cols = [...numaIds];
+  if (t.gpus.some(g => colOf(g.numa) == null) || t.nics.some(n => colOf(n.numa) == null)) cols.push(null);
+  const rankOf = new Map(p.ranks.map(r => [r.gpu, r]));
+  const gpuRow = new Map(t.gpus.map((g, i) => [g.index, i]));
+  const nicCol = new Map(t.nics.map((n, j) => [n.label, j]));
+
+  const pos = { gpu: new Map(), nic: new Map() };
+  const layout = [];
+  let x = 0;
+  for (const id of cols) {
+    const gpus = t.gpus.filter(g => colOf(g.numa) === id), nics = t.nics.filter(n => colOf(n.numa) === id);
+    if (id == null && !gpus.length && !nics.length) continue;
+    const n = Math.max(gpus.length, nics.length, 1), w = PAD * 2 + n * BW + (n - 1) * GAP;
+    const place = (items, y, map, key) => {
+      let ix = x + (w - (items.length * BW + Math.max(0, items.length - 1) * GAP)) / 2;
+      for (const it of items) { map.set(key(it), { x: ix, y }); ix += BW + GAP; }
+    };
+    place(gpus, HEAD, pos.gpu, g => g.index);
+    place(nics, HEAD + GH + LINK, pos.nic, nic => nic.label);
+    layout.push({ id, x, w });
+    x += w + COLGAP;
+  }
+  const W = x - COLGAP, H = HEAD + GH + LINK + NH + PAD;
+  const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, width: W, class: 'diagram', role: 'img',
+    'aria-label': `Placement of ${p.ranks.length} ranks across ${layout.length} NUMA nodes`, style: `width:100%;max-width:${Math.round(W * 1.15)}px;min-width:${Math.min(W, 560)}px` });
+
+  for (const c of layout) {
+    const numa = t.numa_nodes.find(n => n.id === c.id);
+    svg.append(s('rect', { x: c.x, y: 0, width: c.w, height: H, rx: 12, class: 'col' }),
+      s('text', { x: c.x + PAD, y: 22, class: 'col-title' }, c.id == null ? 'NUMA unknown' : `NUMA ${c.id}`),
+      s('text', { x: c.x + PAD, y: 37, class: 'col-sub' }, numa ? trunc(`CPUs ${numa.cpus}`, Math.floor(c.w / 7)) : 'no NUMA affinity'));
+  }
+
+  const links = s('g', {}), pills = s('g', {});
+  for (const r of p.ranks) {
+    const g = pos.gpu.get(r.gpu);
+    if (!g) continue;
+    r.nics.forEach((label, k) => {
+      const n = pos.nic.get(label);
+      if (!n) return;
+      const cls = t.paths[gpuRow.get(r.gpu)][nicCol.get(label)];
+      const off = k ? 12 * k : 0;
+      const x1 = g.x + BW / 2 + off, y1 = g.y + GH, x2 = n.x + BW / 2 + off, y2 = n.y, my = (y1 + y2) / 2;
+      links.append(s('path', { d: `M${x1},${y1}C${x1},${my} ${x2},${my} ${x2},${y2}`, class: `link pc-${cls}${k ? ' secondary' : ''}`, 'data-rank': r.local_rank }));
+      if (k) return;
+      // label the primary link a fifth of the way down, where links from neighbouring GPUs are still apart
+      const lx = 0.896 * x1 + 0.104 * x2, ly = 0.512 * y1 + 0.48 * my + 0.008 * y2;
+      pills.append(s('g', { class: `pill pc-${cls}`, 'data-rank': r.local_rank, transform: `translate(${lx},${ly})` },
+        s('rect', { x: -19, y: -8, width: 38, height: 16, rx: 8 }),
+        s('text', { y: 3.5, 'text-anchor': 'middle' }, cls)));
+    });
+  }
+  svg.append(links, pills);
+
+  for (const gpu of t.gpus) {
+    const g = pos.gpu.get(gpu.index), r = rankOf.get(gpu.index);
+    const farCpu = r && r.numa !== gpu.numa && gpu.numa >= 0;
+    const grp = s('g', { class: `node gpu${r ? '' : ' idle'}`, transform: `translate(${g.x},${g.y})`, tabindex: r ? 0 : null, 'data-rank': r ? r.local_rank : '' },
+      s('rect', { width: BW, height: GH, rx: 8 }),
+      s('text', { x: 10, y: 19, class: 'n-title' }, `GPU${gpu.index}`),
+      s('text', { x: BW - 10, y: 19, 'text-anchor': 'end', class: 'n-badge' }, r ? `rank ${r.local_rank}` : 'no rank'),
+      s('text', { x: 10, y: 35, class: 'n-mono' }, gpu.bdf),
+      r && s('text', { x: 10, y: 51, class: 'n-mono' }, trunc(`${farCpu ? '⚠ ' : ''}CPU ${cpulist(r.cpus)}`, 17)));
+    if (r) {
+      attachTip(grp, () => tipBody(`GPU${gpu.index} · rank ${r.local_rank}`, [
+        { value: r.nics.join(', ') || 'no NIC', label: r.path ? `${r.path}: ${PATHS[r.path]}` : '' },
+        { value: `CPUs ${cpulist(r.cpus)}`, label: `NUMA ${r.numa}` },
+        farCpu && { value: '⚠', label: `CPUs and memory on NUMA ${r.numa}, GPU on NUMA ${gpu.numa}` },
+      ].filter(Boolean)));
+      grp.addEventListener('pointerenter', () => focusRank(svg, r.local_rank));
+      grp.addEventListener('pointerleave', () => focusRank(svg, null));
+      grp.addEventListener('focus', () => focusRank(svg, r.local_rank));
+      grp.addEventListener('blur', () => focusRank(svg, null));
+    }
+    svg.append(grp);
+  }
+  for (const nic of t.nics) {
+    const n = pos.nic.get(nic.label);
+    const users = p.ranks.filter(r => r.nics.includes(nic.label)).map(r => r.local_rank);
+    const sub = !nic.placement ? 'left out' : nic.rate_gbps ? `${nic.rate_gbps} Gb/s ${nic.link_layer === 'InfiniBand' ? 'IB' : nic.link_layer === 'Ethernet' ? 'Ethernet' : ''}` : nic.bdf || 'virtual';
+    const grp = s('g', { class: `node nic${nic.placement ? '' : ' idle'}`, transform: `translate(${n.x},${n.y})`, tabindex: 0, 'data-rank': users.join(' ') },
+      s('rect', { width: BW, height: NH, rx: 8 }),
+      s('text', { x: 10, y: 19, class: 'n-mono', style: 'fill:var(--ink);font-weight:600' }, trunc(nic.label, 16)),
+      s('text', { x: 10, y: 35, class: 'n-mono' }, trunc(sub, 16)));
+    attachTip(grp, () => tipBody(nic.label, [
+      { value: users.length ? `ranks ${users.join(', ')}` : 'no ranks', label: nic.placement ? '' : 'inactive or a slower front-end port' },
+      { value: nic.bdf || 'virtual', label: `NUMA ${nic.numa}` },
+    ]));
+    grp.addEventListener('pointerenter', () => focusWhere(svg, (ranks, el) => el === grp || ranks.some(r => users.includes(r))));
+    grp.addEventListener('pointerleave', () => focusRank(svg, null));
+    svg.append(grp);
+  }
+  return svg;
+}
+
+/* ---------- connection budget ---------- */
+const FIELDS = [
+  { key: 'pattern', label: 'Traffic pattern', type: 'seg', options: [['alltoall', 'All-to-all'], ['allreduce', 'All-reduce']] },
+  { key: 'stack', label: 'Library opening the QPs', type: 'seg', options: [['nccl', 'NCCL'], ['nvshmem', 'NVSHMEM']], show: j => j.pattern === 'alltoall' },
+  { key: 'gpus_per_node', label: 'GPUs per node', type: 'int' },
+  { key: 'nics_per_node', label: 'NICs per node', type: 'int' },
+  { key: 'channels_per_peer', label: 'Network channels per peer', hint: 'NCCL', type: 'int', show: j => j.pattern === 'alltoall' && j.stack === 'nccl' },
+  { key: 'qps_per_conn', label: 'QPs per connection', hint: 'NCCL_IB_QPS_PER_CONNECTION', type: 'int', show: j => j.pattern === 'allreduce' || j.stack === 'nccl' },
+  { key: 'channels', label: 'Channels', hint: 'NCCL rings / trees', type: 'int', show: j => j.pattern === 'allreduce' },
+  { key: 'rc_per_peer', label: 'RC QPs per peer', hint: 'DeepEP num_qps_per_rank', type: 'int', show: j => j.pattern === 'alltoall' && j.stack === 'nvshmem' && !j.dc },
+  { key: 'dc', label: 'DC transport', hint: 'QPs independent of peer count', type: 'bool', show: j => j.pattern === 'alltoall' && j.stack === 'nvshmem' },
+  { key: 'rail_only', label: 'Rail-only all-to-all', hint: 'RDMA to same-rail peers, NVLink forwarding', type: 'bool', show: j => j.pattern === 'alltoall' },
+];
+
+let budgetTimer;
+function setParam(key, value) {
+  S.form[key] = value;
+  S.bq[key] = typeof value === 'boolean' ? (value ? '1' : '0') : String(value);
+  for (const f of FIELDS) {
+    const el = $(`#f-${f.key}`);
+    if (el && f.show) el.hidden = !f.show(S.form);
+  }
+  clearTimeout(budgetTimer);
+  $('#bout')?.classList.add('loading');
+  budgetTimer = setTimeout(async () => { if (await loadBudget()) renderBudgetOut(); }, 140);
+}
+
+function buildBudgetForm() {
+  const job = S.budget.budget.job;
+  S.form = { ...job, profile: S.budget.profile.id };
+  const form = h('form', { class: 'card', onsubmit: e => e.preventDefault() }, h('h3', {}, 'Job'));
+
+  const num = h('input', { type: 'number', min: 1, max: 100000, value: job.nodes, 'aria-label': 'Nodes' });
+  const range = h('input', { type: 'range', min: 0, max: 16, step: 0.05, value: Math.log2(Math.max(1, job.nodes)), 'aria-label': 'Nodes (log scale)' });
+  num.addEventListener('input', () => {
+    const v = Math.round(+num.value);
+    if (v >= 1 && v <= 100000) { range.value = Math.log2(v); setParam('nodes', v); }
+  });
+  range.addEventListener('input', () => { const v = Math.round(2 ** +range.value); num.value = v; setParam('nodes', v); });
+  form.append(h('label', { class: 'field' }, h('span', {}, 'Nodes'), h('div', { class: 'nodes-row' }, num, range)));
+
+  for (const f of FIELDS) {
+    let el;
+    if (f.type === 'seg') {
+      el = h('div', { class: 'field' }, h('span', {}, f.label), segmented(f.options, job[f.key], v => setParam(f.key, v), f.label));
+    } else if (f.type === 'int') {
+      const input = h('input', { type: 'number', min: 1, value: job[f.key] });
+      input.addEventListener('input', () => { const v = Math.round(+input.value); if (v >= 1) setParam(f.key, v); });
+      el = h('label', { class: 'field' }, h('span', {}, f.label), input, f.hint && h('small', {}, f.hint));
+    } else {
+      const input = h('input', { type: 'checkbox', checked: job[f.key] });
+      input.addEventListener('change', () => setParam(f.key, input.checked));
+      el = h('label', { class: 'check' }, input, h('span', {}, f.label, h('small', {}, f.hint)));
+    }
+    el.id = `f-${f.key}`;
+    if (f.show) el.hidden = !f.show(job);
+    form.append(el);
+  }
+  const sel = h('select', { id: 'profile-select' }, S.budget.profiles.map(p => h('option', { value: p.id, selected: p.id === S.budget.profile.id }, `${p.name} (${p.id.split('/')[0]})`)));
+  sel.addEventListener('change', () => setParam('profile', sel.value));
+  form.append(h('label', { class: 'field' }, h('span', {}, 'NIC profile'), sel, h('small', {}, 'from railmap calibrate, or the shipped prior')));
+  return form;
+}
+
+async function renderBudget() {
+  const root = $('#tab-budget');
+  if (!S.budget && !S.budgetError) await loadBudget();
+  if (!root.firstChild) {
+    if (!S.budget) { root.replaceChildren(empty('Could not compute the budget', S.budgetError || '')); return; }
+    root.append(
+      head('Connection budget', 'How many RDMA queue pairs (QPs) each NIC holds for a collective job, and how that compares with the knee where the NIC’s small-message rate drops.'),
+      h('div', { class: 'budget' }, buildBudgetForm(), h('div', { id: 'bout' })));
+  }
+  renderBudgetOut();
+}
+
+function renderBudgetOut() {
+  const out = $('#bout');
+  if (!out || $('#tab-budget').hidden) return;
+  out.classList.remove('loading');
+  if (S.budgetError) {
+    out.replaceChildren(h('div', { class: 'msgs' }, h('div', { class: 'msg warn' }, h('b', {}, '⚠'), h('span', {}, S.budgetError))));
+    return;
+  }
+  const { budget: b, profile, series } = S.budget;
+  const j = b.job;
+  const statusText = { ok: 'Under the knee', near: 'Near the knee', over: 'Over the knee' }[b.status];
+  const statusSub = {
+    ok: `below half of ${fmtInt(b.knee_qps)} QPs/NIC`,
+    near: `past half of ${fmtInt(b.knee_qps)} QPs/NIC`,
+    over: `past ${fmtInt(b.knee_qps)} QPs/NIC`,
+  }[b.status];
+  let rate, rateSub;
+  if (b.relative_rate != null) {
+    rate = `${b.beyond_curve ? '≤ ' : ''}${pct(b.relative_rate)}`;
+    rateSub = b.beyond_curve ? 'of peak; past the last profile point' : 'of peak small-message rate';
+  } else if (j.nodes < 2) {
+    rate = '–'; rateSub = 'single node: no inter-node QPs';
+  } else {
+    rate = 'Unknown';
+    rateSub = profile.kind === 'prior' ? 'the prior has one point; calibrate this NIC' : 'below the first profile point';
+  }
+  const chart = h('div', { class: 'chart' });
+  const profChart = h('div', { class: 'chart' });
+  const colors = series.map((_, i) => `var(--s${i + 1})`);
+  out.replaceChildren(
+    h('div', { class: 'tiles' },
+      tile('QPs per NIC', fmtInt(b.qps_per_nic), `${b.formula}  ·  ${fmtInt(b.qps_per_gpu)} per GPU`, 'hero'),
+      tile('Status', [h('span', { class: `status-ic ${b.status}`, 'aria-hidden': 'true' }, { ok: '✓', near: '!', over: '✕' }[b.status]), statusText], statusSub, 'text'),
+      tile('Nodes before the knee', b.max_nodes != null ? fmtInt(b.max_nodes) : 'No limit', b.max_nodes != null ? `at ${j.gpus_per_node} GPUs and ${j.nics_per_node} NICs per node` : 'QPs do not grow with node count'),
+      tile('Expected message rate', rate, rateSub)),
+    card('QPs per NIC as the job grows', `${j.pattern === 'alltoall' ? 'All-to-all' : 'All-reduce'} over ${j.pattern === 'alltoall' ? j.stack.toUpperCase() : 'NCCL'}; bands are relative to the knee of ${profile.name}. Both axes are logarithmic.`,
+      series.length > 1 && lineLegend(series.map((sr, i) => ({ label: shortLabel(sr.label), color: colors[i] }))), chart),
+    series.length > 1
+      ? card(`What would change it at ${fmtInt(j.nodes)} nodes`, 'Each row changes one setting of this job. QPs are model estimates; `railmap observe` measures the real count.',
+        table(['Change', 'Setting', { label: 'QPs per NIC', num: true }, { label: 'Nodes before the knee', num: true }],
+          series.map((sr, i) => [h('span', {}, h('span', { class: 'key', style: `--c:${colors[i]}` }), i ? sr.label : 'this job, as configured'),
+            sr.setting ? h('span', { class: 'mono' }, sr.setting) : h('span', { class: 'dim' }, '–'), fmtInt(sr.qps_at_job),
+            (i ? sr.max_nodes : b.max_nodes) != null ? fmtInt(i ? sr.max_nodes : b.max_nodes) : 'no limit'])))
+      : card('What would change it', null, h('p', { class: 'dim' }, 'No single setting lowers QPs per NIC for this configuration.')),
+    card(`NIC profile: ${profile.name}`, profile.source, profChart));
+  drawGrowth(chart, S.budget, colors);
+  drawProfile(profChart, profile, b);
+}
+
+function drawGrowth(el, data, colors) {
+  const { budget: b, series, nodes_axis: xs } = data;
+  const W = Math.max(280, el.clientWidth), H = 300, m = { l: 48, r: 14, t: 24, b: 34 };
+  const knee = b.knee_qps;
+  const vals = series.flatMap(sr => sr.qps).filter(v => v > 0);
+  const y0 = Math.max(1, Math.min(...vals, knee / 2) / 2), y1 = Math.max(...vals, knee) * 2;
+  const x = logScale(xs[0], xs.at(-1), m.l, W - m.r), y = logScale(y0, y1, H - m.b, m.t);
+  const yv = v => y(Math.max(v, y0));
+  const svg = s('svg', { width: W, height: H, class: 'plot', tabindex: 0, role: 'img',
+    'aria-label': `QPs per NIC from ${xs[0]} to ${xs.at(-1)} nodes; this job: ${b.qps_per_nic} QPs per NIC at ${b.job.nodes} nodes` });
+  const pw = W - m.l - m.r;
+  svg.append(
+    s('rect', { x: m.l, y: m.t, width: pw, height: Math.max(0, y(knee) - m.t), class: 'band over' }),
+    s('rect', { x: m.l, y: y(knee), width: pw, height: Math.max(0, y(knee / 2) - y(knee)), class: 'band near' }));
+  axes(svg, { x, y, W, H, m, xTicks: logTicks(xs[0], xs.at(-1), Math.floor(pw / 52)), yTicks: logTicks(y0, y1, 7), xFmt: fmtCompact, yFmt: fmtCompact, xLabel: 'nodes', yLabel: 'QPs per NIC' });
+  svg.append(
+    y(knee) - m.t > 40 && s('text', { x: m.l + 8, y: m.t + 15, class: 'band-label' }, 'over the knee'),
+    s('text', { x: m.l + 8, y: y(knee) + 15, class: 'band-label' }, 'near the knee'),
+    s('line', { x1: m.l, x2: W - m.r, y1: y(knee), y2: y(knee), class: 'ref' }),
+    s('text', { x: m.l + 8, y: y(knee) - 6, class: 'ref-label' }, `knee ${fmtInt(knee)} QPs (${data.profile.kind})`));
+  if (b.job.nodes >= 2) {
+    const jx = x(b.job.nodes);
+    svg.append(s('line', { x1: jx, x2: jx, y1: m.t, y2: H - m.b, class: 'ref subtle' }),
+      s('text', { x: jx + (jx > W - 120 ? -6 : 6), y: H - m.b - 8, 'text-anchor': jx > W - 120 ? 'end' : 'start', class: 'ref-label' }, `${fmtInt(b.job.nodes)} nodes`));
+  }
+  series.forEach((sr, i) => {
+    svg.append(s('path', { d: 'M' + xs.map((n, k) => `${x(n).toFixed(1)},${yv(sr.qps[k]).toFixed(1)}`).join('L'), class: 'line', style: `stroke:${colors[i]}` }));
+  });
+  if (b.job.nodes >= 2) svg.append(s('circle', { cx: x(b.job.nodes), cy: yv(b.qps_per_nic), r: 5, class: 'dot', style: `fill:${colors[0]}` }));
+
+  const cross = s('g', { class: 'cross', visibility: 'hidden' });
+  const vline = s('line', { y1: m.t, y2: H - m.b });
+  const dots = series.map((_, i) => s('circle', { r: 4, class: 'dot', style: `fill:${colors[i]}` }));
+  cross.append(vline, ...dots);
+  svg.append(cross);
+  let idx = Math.max(0, xs.indexOf(b.job.nodes));
+  const show = (k, cx, cy) => {
+    idx = k;
+    const px = x(xs[k]);
+    cross.setAttribute('visibility', 'visible');
+    vline.setAttribute('x1', px); vline.setAttribute('x2', px);
+    dots.forEach((d, i) => { d.setAttribute('cx', px); d.setAttribute('cy', yv(series[i].qps[k])); });
+    const rows = series.map((sr, i) => ({ value: fmtInt(sr.qps[k]), label: shortLabel(sr.label), color: colors[i] }));
+    showTip(tipBody(`${fmtInt(xs[k])} nodes · QPs per NIC`, rows), cx, cy);
+  };
+  const hit = s('rect', { x: m.l, y: m.t, width: pw, height: H - m.t - m.b, class: 'hit' });
+  hit.addEventListener('pointermove', e => {
+    const r = svg.getBoundingClientRect(), lx = Math.log(x.inv(e.clientX - r.left));
+    let best = 0;
+    xs.forEach((n, k) => { if (Math.abs(Math.log(n) - lx) < Math.abs(Math.log(xs[best]) - lx)) best = k; });
+    show(best, e.clientX, e.clientY);
+  });
+  hit.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); hideTip(); });
+  svg.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const k = Math.max(0, Math.min(xs.length - 1, idx + (e.key === 'ArrowRight' ? 1 : -1)));
+    const r = svg.getBoundingClientRect();
+    show(k, r.left + x(xs[k]), r.top + m.t + 20);
+  });
+  svg.addEventListener('blur', () => { cross.setAttribute('visibility', 'hidden'); hideTip(); });
+  svg.append(hit);
+  el.replaceChildren(svg);
+}
+
+function drawProfile(el, profile, b) {
+  const pts = [...profile.curve].sort((a, b2) => a[0] - b2[0]);
+  const jq = b.qps_per_nic;
+  const qs = [...pts.map(p => p[0]), profile.knee_qps, ...(jq > 0 ? [jq] : [])];
+  const W = Math.max(280, el.clientWidth), H = 220, m = { l: 48, r: 14, t: 24, b: 34 };
+  const x0 = Math.max(1, Math.min(...qs) / 3), x1 = Math.max(...qs) * 3;
+  const x = logScale(x0, x1, m.l, W - m.r), y = linScale(0, 1.05, H - m.b, m.t);
+  const svg = s('svg', { width: W, height: H, class: 'plot', role: 'img', 'aria-label': `Message rate relative to peak against QPs per NIC for profile ${profile.name}` });
+  axes(svg, { x, y, W, H, m, xTicks: logTicks(x0, x1, Math.floor((W - m.l - m.r) / 52)), yTicks: [0, 0.25, 0.5, 0.75, 1], xFmt: fmtCompact, yFmt: pct, xLabel: 'QPs per NIC', yLabel: 'message rate vs peak' });
+  const vref = (q, label, cls) => {
+    const px = x(q), right = px > W - 140;
+    svg.append(s('line', { x1: px, x2: px, y1: m.t, y2: H - m.b, class: `ref ${cls}` }),
+      s('text', { x: px + (right ? -6 : 6), y: m.t + 12, 'text-anchor': right ? 'end' : 'start', class: 'ref-label' }, label));
+  };
+  vref(profile.knee_qps, `knee ${fmtInt(profile.knee_qps)}`, '');
+  if (jq > 0) {
+    const kx = x(profile.knee_qps), jx = x(jq);
+    if (Math.abs(kx - jx) > 70) vref(jq, `this job ${fmtInt(jq)}`, 'subtle');
+    else svg.append(s('line', { x1: jx, x2: jx, y1: m.t + 18, y2: H - m.b, class: 'ref subtle' }));
+  }
+  if (pts.length > 1) svg.append(s('path', { d: 'M' + pts.map(([q, r]) => `${x(q)},${y(r)}`).join('L'), class: 'line', style: 'stroke:var(--s1)' }));
+  for (const [q, r] of pts) {
+    const g = s('g', { tabindex: 0 }, s('circle', { cx: x(q), cy: y(r), r: 12, class: 'hit' }), s('circle', { cx: x(q), cy: y(r), r: 4.5, class: 'dot', style: 'fill:var(--s1)' }));
+    attachTip(g, () => tipBody(`${fmtInt(q)} QPs per NIC`, [{ value: pct(r), label: 'of peak message rate' }]));
+    svg.append(g);
+  }
+  const caption = profile.kind === 'prior'
+    ? `The prior has a single point (${pct(pts[0]?.[1] ?? 0)} of peak at ${fmtInt(pts[0]?.[0])} QPs), so the rate below it is unknown. Run railmap calibrate on this NIC to measure the curve.`
+    : `Measured curve with ${pts.length} points.`;
+  el.replaceChildren(svg, h('p', { class: 'caption' }, caption));
+}
+
+/* ---------- campaign results ---------- */
+const VARIANT_COLOR = { none: 'var(--s1)', best: 'var(--s2)', worst: 'var(--s3)' };
+
+function renderResults() {
+  const root = $('#tab-results');
+  root.replaceChildren(head('Campaign results', 'Measurements from infra/azure/campaign.sh: GPUDirect RDMA bandwidth, the QP knee, the QP model against observed counts, and placement validation.'));
+  const c = S.camps;
+  if (!c) { root.append(empty('Loading…')); return; }
+  if (!c.campaigns.length) {
+    root.append(empty('No campaign results yet',
+      `Looked for campaign folders in ${c.results || 'results/'}.`,
+      'infra/azure/campaign.sh writes results/azure-ndv5-<stamp>/. Start the UI with --results DIR to look elsewhere.',
+      c.error || ''));
+    return;
+  }
+  const sel = h('select', {}, c.campaigns.map(n => h('option', { value: n, selected: n === S.campName }, n)));
+  sel.addEventListener('change', async () => { await loadCampaign(sel.value); render(); });
+  root.append(h('div', { class: 'toolbar' }, h('label', { class: 'field inline' }, h('span', {}, 'Campaign'), sel),
+    h('span', { class: 'dim mono' }, c.results)));
+  if (S.campError) { root.append(empty('Could not read this campaign', S.campError)); return; }
+  const d = S.camp;
+  const sections = [];
+  if (d.gdr?.length) sections.push(gdrSection(d.gdr));
+  if (d.profile) sections.push(kneeSection(d.profile));
+  if (d.inflation.length) sections.push(inflationSection(d.inflation));
+  if (d.validate?.length) sections.push(validationSection(d.validate));
+  if (!sections.length) sections.push(empty('No measurements in this folder yet', 'The campaign may still be running, or it stopped before its first probe.'));
+  root.append(...sections.map(sec => sec.node));
+  sections.forEach(sec => sec.draw?.());
+}
+
+function gdrSection(cells) {
+  const gpus = [...new Set(cells.map(c => c.gpu))].sort((a, b) => a - b);
+  const nics = [...new Set(cells.map(c => c.nic))];
+  const ok = cells.filter(c => c.bw_avg_gbps != null);
+  const max = Math.max(1, ...ok.map(c => c.bw_avg_gbps));
+  const heat = h('table', { class: 'heat' },
+    h('thead', {}, h('tr', {}, h('th', {}, 'GPU'), nics.map((n, j) => h('th', { title: n }, `NIC${j}`, h('span', { class: 'nm' }, n))))),
+    h('tbody', {}, gpus.map(g => h('tr', {}, h('th', {}, `GPU${g}`), nics.map(n => {
+      const c = cells.find(x => x.gpu === g && x.nic === n);
+      if (!c) return h('td', { class: 'fail' }, '–');
+      if (c.bw_avg_gbps == null) {
+        const td = h('td', { class: 'fail', tabindex: 0 }, h('b', {}, 'fail'), h('small', {}, c.path));
+        attachTip(td, () => tipBody(`GPU${g} → ${n}`, [{ value: 'failed', label: c.error || '' }]));
+        return td;
+      }
+      const t = c.bw_avg_gbps / max;
+      const td = h('td', { tabindex: 0, style: `--t:${t.toFixed(3)}`, 'data-hi': t > 0.55 ? '' : null }, h('b', {}, fmtNum(c.bw_avg_gbps, 0)), h('small', {}, c.path));
+      attachTip(td, () => tipBody(`GPU${g} → ${n}`, [{ value: `${fmtNum(c.bw_avg_gbps)} Gb/s`, label: `${c.path}: ${PATHS[c.path] || ''}` }]));
+      return td;
+    })))));
+  const by = {};
+  for (const c of ok) (by[c.path] ||= []).push(c.bw_avg_gbps);
+  const order = Object.keys(PATHS).filter(p => by[p]);
+  const rows = order.map(p => {
+    const v = by[p];
+    return { path: p, mean: v.reduce((a, b) => a + b, 0) / v.length, min: Math.min(...v), max: Math.max(...v), n: v.length };
+  });
+  const bars = h('div', { class: 'chart' });
+  return {
+    node: card('GPUDirect RDMA bandwidth', 'GPU memory on this node to host memory on the peer, through every NIC. Gb/s per pair; darker is faster.',
+      h('div', { class: 'scroll' }, heat),
+      h('div', { class: 'ramp' }, '0', h('i', {}), `${fmtNum(max, 0)} Gb/s`),
+      h('h3', { style: 'margin-top:20px;font-size:13px' }, 'Mean by path class'),
+      bars,
+      tableView(['Path', { label: 'Mean Gb/s', num: true }, { label: 'Min', num: true }, { label: 'Max', num: true }, { label: 'Pairs', num: true }],
+        rows.map(r => [pathTag(r.path), fmtNum(r.mean), fmtNum(r.min), fmtNum(r.max), r.n]))),
+    draw: () => hbars(bars, rows.map(r => ({
+      label: r.path, value: r.mean, cls: `pc-${r.path}`, color: 'var(--tone)',
+      text: `${fmtNum(r.mean, 0)} Gb/s  ·  min ${fmtNum(r.min, 0)}  ·  ${r.n} pairs`,
+      tip: [{ value: `${fmtNum(r.mean)} Gb/s`, label: 'mean' }, { value: `${fmtNum(r.min)}–${fmtNum(r.max)}`, label: 'range' }, { value: r.n, label: 'pairs' }],
+    }))),
+  };
+}
+
+function hbars(el, rows, opts = {}) {
+  const LBL = opts.labelWidth || 64, T = 18, ROW = opts.rowHeight || 30, W = Math.max(280, el.clientWidth);
+  const textRoom = Math.min(260, W * 0.45);
+  const max = opts.max || Math.max(1e-9, ...rows.map(r => r.value || 0));
+  const x = linScale(0, max, LBL, W - textRoom);
+  const H = rows.length * ROW + 6;
+  const svg = s('svg', { width: W, height: H, class: 'plot', role: 'img', 'aria-label': opts.aria || 'bar chart' });
+  svg.append(s('line', { x1: LBL, x2: LBL, y1: 0, y2: H, class: 'axis' }));
+  rows.forEach((r, i) => {
+    const y = i * ROW + (ROW - T) / 2 + 3;
+    if (r.group) svg.append(s('text', { x: 0, y: y + T - 5, class: 'cat-label', style: 'font-weight:600;fill:var(--ink)' }, r.label));
+    else svg.append(s('text', { x: LBL - 8, y: y + T - 5, 'text-anchor': 'end', class: 'cat-label' }, r.label));
+    if (r.group) return;
+    const w = r.value != null ? Math.max(2, x(r.value) - LBL) : 0;
+    const g = s('g', { class: r.cls || null, tabindex: 0 },
+      s('rect', { x: LBL, y: y - 4, width: W - LBL, height: T + 8, class: 'hit' }),
+      w ? s('path', { d: hbarPath(LBL + 1, y, w, T), style: `fill:${r.color}` }) : null,
+      s('text', { x: LBL + w + 8, y: y + T - 5, class: 'bar-label' }, r.text));
+    if (r.tip) attachTip(g, () => tipBody(r.tipTitle || r.label, r.tip));
+    svg.append(g);
+  });
+  el.replaceChildren(svg);
+}
+
+function kneeSection(prof) {
+  const raw = prof.raw || [];
+  const chart = h('div', { class: 'chart' });
+  const knee = prof.knee_found ? `${fmtInt(prof.knee_qps)} QPs` : `not reached (more than ${fmtInt(prof.knee_qps)} QPs)`;
+  return {
+    node: card(`QP knee: ${knee}`, prof.source, chart,
+      tableView(['QPs', { label: 'Mpps', num: true }, { label: 'Gb/s', num: true }, { label: 'Relative', num: true }],
+        raw.map(([q, mpps, bw], i) => [fmtInt(q), fmtNum(mpps, 2), fmtNum(bw, 1), prof.curve[i] ? pct(prof.curve[i][1]) : '–']))),
+    draw: () => {
+      if (!raw.length) { chart.replaceChildren(h('p', { class: 'dim' }, 'No sweep points recorded.')); return; }
+      const W = Math.max(280, chart.clientWidth), H = 260, m = { l: 48, r: 14, t: 24, b: 34 };
+      const q0 = Math.min(...raw.map(r => r[0])), q1 = Math.max(...raw.map(r => r[0]));
+      const ymax = Math.max(...raw.map(r => r[1])) * 1.12;
+      const x = logScale(Math.max(1, q0 / 1.5), q1 * 1.5, m.l, W - m.r), y = linScale(0, ymax, H - m.b, m.t);
+      const svg = s('svg', { width: W, height: H, class: 'plot', role: 'img', 'aria-label': 'Message rate against QP count' });
+      axes(svg, { x, y, W, H, m, xTicks: logTicks(Math.max(1, q0 / 1.5), q1 * 1.5, Math.floor((W - m.l - m.r) / 52)), yTicks: linTicks(0, ymax, 4), xFmt: fmtCompact, yFmt: v => fmtNum(v, 1), xLabel: 'QPs', yLabel: 'message rate (Mpps)' });
+      if (prof.knee_found) {
+        const kx = x(prof.knee_qps);
+        svg.append(s('line', { x1: kx, x2: kx, y1: m.t, y2: H - m.b, class: 'ref' }), s('text', { x: kx + 6, y: m.t + 12, class: 'ref-label' }, `knee ${fmtInt(prof.knee_qps)}`));
+      }
+      svg.append(s('path', { d: 'M' + raw.map(([q, r]) => `${x(q)},${y(r)}`).join('L'), class: 'line', style: 'stroke:var(--s1)' }));
+      for (const [q, mpps, bw] of raw) {
+        const g = s('g', { tabindex: 0 }, s('circle', { cx: x(q), cy: y(mpps), r: 12, class: 'hit' }), s('circle', { cx: x(q), cy: y(mpps), r: 4.5, class: 'dot', style: 'fill:var(--s1)' }));
+        attachTip(g, () => tipBody(`${fmtInt(q)} QPs`, [{ value: `${fmtNum(mpps, 2)} Mpps`, label: 'message rate' }, { value: `${fmtNum(bw, 1)} Gb/s`, label: 'bandwidth' }]));
+        svg.append(g);
+      }
+      chart.replaceChildren(svg);
+    },
+  };
+}
+
+function inflationSection(rows) {
+  const chart = h('div', { class: 'chart' });
+  const colors = { model: 'var(--s1)', observed: 'var(--s2)' };
+  const err = r => (r.model ? r.observed / r.model - 1 : null);
+  return {
+    node: card('QPs per NIC: model against observed', 'Two nodes running alltoall_perf, with NCCL_IB_QPS_PER_CONNECTION raised to stand in for larger jobs. Observed is the peak `rdma resource show qp` count on any NIC.',
+      lineLegend([{ label: 'model estimate', color: colors.model }, { label: 'observed peak', color: colors.observed }]), chart,
+      table([{ label: 'QPs per connection', num: true }, { label: 'Model', num: true }, { label: 'Observed peak', num: true }, { label: 'Error', num: true }, { label: 'Mean time ≤ 1 KiB (µs)', num: true }],
+        rows.map(r => [r.qps_per_conn, fmtInt(r.model), fmtInt(r.observed), err(r) != null ? signedPct(err(r)) : '–', r.small_time_us != null ? fmtNum(r.small_time_us, 1) : '–']))),
+    draw: () => {
+      const W = Math.max(280, chart.clientWidth), H = 260, m = { l: 48, r: 14, t: 24, b: 34 };
+      const vals = rows.flatMap(r => [r.model, r.observed]).filter(v => v > 0);
+      if (!vals.length) { chart.replaceChildren(h('p', { class: 'dim' }, 'No QPs observed.')); return; }
+      const y0 = Math.min(...vals) / 2, y1 = Math.max(...vals) * 2;
+      const step = (W - m.l - m.r) / rows.length;
+      const cx = i => m.l + step * (i + 0.5);
+      const y = logScale(y0, y1, H - m.b, m.t);
+      const svg = s('svg', { width: W, height: H, class: 'plot', role: 'img', 'aria-label': 'Model QPs per NIC against observed peak, by QPs per connection' });
+      axes(svg, { x: null, y, W, H, m, xTicks: [], yTicks: logTicks(y0, y1, 6), xFmt: String, yFmt: fmtCompact, xLabel: 'NCCL_IB_QPS_PER_CONNECTION', yLabel: 'QPs per NIC' });
+      rows.forEach((r, i) => {
+        const px = cx(i);
+        const g = s('g', { tabindex: 0 }, s('rect', { x: px - step / 2, y: m.t, width: step, height: H - m.t - m.b, class: 'hit' }),
+          s('text', { x: px, y: H - m.b + 17, 'text-anchor': 'middle', class: 'tick' }, r.qps_per_conn));
+        // side by side, so a close match on the log axis does not hide the model dot behind the observed one
+        const mx = px - 7, ox = px + 7;
+        if (r.model > 0 && r.observed > 0) g.append(s('line', { x1: mx, x2: ox, y1: y(r.model), y2: y(r.observed), class: 'stem' }));
+        if (r.model > 0) g.append(s('circle', { cx: mx, cy: y(r.model), r: 5, class: 'dot', style: `fill:${colors.model}` }));
+        if (r.observed > 0) g.append(s('circle', { cx: ox, cy: y(r.observed), r: 5, class: 'dot', style: `fill:${colors.observed}` }));
+        const e = err(r);
+        if (e != null) g.append(s('text', { x: ox + 9, y: y(Math.max(r.model, r.observed || 0)) - 6, class: 'ref-label' }, signedPct(e)));
+        attachTip(g, () => tipBody(`${r.qps_per_conn} QPs per connection`, [
+          { value: fmtInt(r.model), label: 'model', color: colors.model },
+          { value: fmtInt(r.observed), label: 'observed peak', color: colors.observed },
+          r.small_time_us != null && { value: `${fmtNum(r.small_time_us, 1)} µs`, label: 'mean time, messages ≤ 1 KiB' },
+        ].filter(Boolean)));
+        svg.append(g);
+      });
+      chart.replaceChildren(svg);
+    },
+  };
+}
+
+function validationSection(runs) {
+  const chart = h('div', { class: 'chart' });
+  const tests = [...new Set(runs.map(r => r.test))];
+  const base = Object.fromEntries(runs.filter(r => r.variant === 'none').map(r => [r.test, r.avg_busbw]));
+  const failed = runs.filter(r => r.exit_code || r.avg_busbw == null);
+  const max = Math.max(1e-9, ...runs.map(r => r.avg_busbw || 0));
+  const rows = [];
+  for (const t of tests) {
+    rows.push({ group: true, label: t });
+    for (const r of runs.filter(x => x.test === t)) {
+      const ref = base[t], delta = r.avg_busbw && ref && r.variant !== 'none' ? r.avg_busbw / ref - 1 : null;
+      rows.push({
+        label: r.variant, value: r.avg_busbw, color: VARIANT_COLOR[r.variant] || 'var(--s4)',
+        text: r.avg_busbw == null ? `failed (exit ${r.exit_code})` : `${fmtNum(r.avg_busbw, 2)} GB/s${delta != null ? `  ·  ${signedPct(delta)} vs none` : ''}`,
+        tipTitle: `${t} · ${r.variant}`,
+        tip: [{ value: r.avg_busbw != null ? `${fmtNum(r.avg_busbw, 2)} GB/s` : 'failed', label: 'average bus bandwidth' }, delta != null && { value: signedPct(delta), label: 'vs no binding' }].filter(Boolean),
+      });
+    }
+  }
+  return {
+    node: card('Placement validation', 'nccl-tests average bus bandwidth with no binding (none), railmap’s placement (best) and the deliberately bad one (worst).',
+      lineLegend(Object.entries(VARIANT_COLOR).map(([k, c]) => ({ label: { none: 'none: no binding', best: 'best: railmap', worst: 'worst: control' }[k], color: c }))),
+      chart,
+      failed.map(r => h('details', { class: 'tv' }, h('summary', {}, `${r.test} / ${r.variant} failed (exit ${r.exit_code})`), h('pre', { class: 'env' }, `${r.command}\n\n${(r.tail || '').slice(-1500)}`))),
+      tableView(['Test', 'Variant', { label: 'Avg bus bandwidth (GB/s)', num: true }, { label: 'vs none', num: true }, { label: 'Exit', num: true }],
+        runs.map(r => [r.test, r.variant, r.avg_busbw != null ? fmtNum(r.avg_busbw, 2) : '–', r.avg_busbw && base[r.test] && r.variant !== 'none' ? signedPct(r.avg_busbw / base[r.test] - 1) : '', r.exit_code]))),
+    draw: () => hbars(chart, rows, { max, labelWidth: 64, aria: 'Average bus bandwidth by test and placement variant' }),
+  };
+}
+
+/* ---------- wiring ---------- */
+document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+addEventListener('hashchange', () => showTab(location.hash.slice(1)));
+
+async function uploadFile(file) {
+  if (!file) return;
+  try {
+    await api('/api/topology', { method: 'POST', headers: { 'X-Filename': encodeURIComponent(file.name), 'Content-Type': 'application/octet-stream' }, body: await file.text() });
+  } catch (e) { toast(`Could not load ${file.name}: ${e.message}`); return; }
+  await reloadForTopology();
+  toast(`Planning offline from ${file.name}`);
+}
+$('#load-btn').addEventListener('click', () => $('#file').click());
+$('#file').addEventListener('change', e => { uploadFile(e.target.files[0]); e.target.value = ''; });
+$('#reset-btn').addEventListener('click', async () => {
+  try { await api('/api/topology/reset', { method: 'POST' }); } catch (e) { toast(e.message); return; }
+  await reloadForTopology();
+  toast('Back to the startup topology');
+});
+let dragDepth = 0;
+addEventListener('dragenter', e => { if (e.dataTransfer?.types.includes('Files')) { dragDepth++; $('#drop').hidden = false; } });
+addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('#drop').hidden = true; } });
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', e => { e.preventDefault(); dragDepth = 0; $('#drop').hidden = true; uploadFile(e.dataTransfer.files[0]); });
+
+function storedTheme() { try { return localStorage.getItem('railmap-theme'); } catch { return null; } }
+const theme = storedTheme();
+if (theme) document.documentElement.dataset.theme = theme;
+$('#theme-btn').addEventListener('click', () => {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  const next = dark ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('railmap-theme', next); } catch { /* storage unavailable */ }
+});
+
+let resizeTimer, lastWidth = innerWidth;
+addEventListener('resize', () => {
+  if (innerWidth === lastWidth) return;
+  lastWidth = innerWidth;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => (S.tab === 'budget' ? renderBudgetOut() : render()), 150);
+});
+
+(async () => {
+  try { await loadTopology(); } catch (e) { $('#tab-topology').replaceChildren(empty('Could not reach railmap', e.message)); return; }
+  await Promise.all([loadPlan(), loadBudget(), loadCampaigns()]);
+  showTab(location.hash.slice(1));
+})();
+</script>
+</body>
+</html>

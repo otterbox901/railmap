@@ -24,6 +24,7 @@ from railmap.probe import perftest
 from railmap.probe import validate as val
 from railmap.topology.discover import discover, placement_nics
 from railmap.topology.model import Topology
+from railmap.ui import server as uiserver
 
 app = typer.Typer(no_args_is_help=True, add_completion=False, help=__doc__)
 console = Console()
@@ -263,6 +264,20 @@ def validate(
     if output:
         output.write_text(json.dumps([asdict(r) for r in runs], indent=2) + "\n")
     report.show_validation(runs, console)
+
+
+@app.command()
+def ui(
+    topo_file: TopoFile = None,
+    snapshot: Snapshot = None,
+    results: Annotated[Path, typer.Option(help="campaign results directory")] = Path("results"),
+    profile: Annotated[Path | None, typer.Option(help="extra NIC calibration profile JSON")] = None,
+    host: Annotated[str, typer.Option(help="address to listen on")] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="port to listen on (0: any free port)")] = 8765,
+    open_browser: Annotated[bool, typer.Option("--open/--no-open", help="open a browser tab")] = True,
+) -> None:
+    """Serve a local web page: topology, placement, connection budget and campaign results."""
+    uiserver.serve(uiserver.State(_topology(topo_file, snapshot), results, profile), host, port, open_browser)
 
 
 if __name__ == "__main__":

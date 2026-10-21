@@ -94,7 +94,7 @@ class Budget:
     recommendations: list[Recommendation]
 
 
-def _candidates(job: Job) -> list[tuple[str, str, Job]]:
+def alternatives(job: Job) -> list[tuple[str, str, Job]]:
     out = []
     if job.pattern == "alltoall" and not job.rail_only:
         out.append(
@@ -143,7 +143,7 @@ def evaluate(job: Job, profile: Profile) -> Budget:
     status = "ok" if est.qps_per_nic < knee / 2 else "near" if est.qps_per_nic < knee else "over"
     recs = []
     if status != "ok":
-        for change, setting, alt in _candidates(job):
+        for change, setting, alt in alternatives(job):
             alt_qps = estimate(alt).qps_per_nic
             if alt_qps < est.qps_per_nic:
                 recs.append(Recommendation(change, setting, alt_qps, max_nodes_under(alt, knee)))

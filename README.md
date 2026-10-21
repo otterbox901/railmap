@@ -1,5 +1,30 @@
 # railmap
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/placement-dark.png">
+  <img alt="railmap ui, placement view: eight ranks on an ND H100 v5, each GPU linked to the NIC behind the same PCIe switch (PIX), with CPUs from the GPU's NUMA node" src="docs/placement-light.png">
+</picture>
+
+<table>
+  <tr>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/budget-dark.png">
+        <img alt="Connection budget view: 4,064 QPs per NIC for a 128-node all-to-all, over the 3,000-QP knee, with the settings that would lower it" src="docs/budget-light.png">
+      </picture>
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/topology-dark.png">
+        <img alt="Topology view: GPU by NIC path-class matrix, PIX on the diagonal, PHB within a socket and SYS across sockets" src="docs/topology-light.png">
+      </picture>
+    </td>
+  </tr>
+</table>
+
+<sub><code>railmap ui</code> on the ND H100 v5 test fixture (Azure's published topology file and a simulated VM). The budget uses the
+shipped one-point prior until the <a href="#azure-campaign">Azure campaign</a> measures a NIC.</sub>
+
 Places each rank of a multi-GPU job on the right NIC, CPU cores and NUMA memory. Also warns when a collective job
 will open more RDMA connections per NIC than the NIC handles well.
 

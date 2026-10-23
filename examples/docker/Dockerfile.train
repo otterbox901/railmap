@@ -1,0 +1,10 @@
+# Add railmap to your own training image. railmap is pure Python and needs nothing at build time; numactl lets
+# `railmap exec` bind each rank's memory to its GPU's NUMA node.
+FROM nvcr.io/nvidia/pytorch:25.09-py3
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends numactl \
+ && rm -rf /var/lib/apt/lists/* \
+ && pip install --no-cache-dir railmap
+
+# Launch with: torchrun --nproc-per-node 8 --no-python railmap exec -- python train.py

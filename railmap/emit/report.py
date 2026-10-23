@@ -5,6 +5,7 @@ from __future__ import annotations
 from rich.console import Console
 from rich.table import Table
 
+from railmap.doctor import Check
 from railmap.placement.assign import Plan
 from railmap.placement.budget import Budget
 from railmap.probe.gdr_matrix import Cell
@@ -183,3 +184,16 @@ def show_validation(runs: list[Run], console: Console) -> None:
     for r in runs:
         if r.exit_code or r.avg_busbw is None:
             console.print(f"[red]{r.test}/{r.variant} failed[/]: {r.command}\n{r.tail[-800:]}")
+
+
+DOCTOR_STYLE = {"ok": "green", "warn": "yellow", "fail": "bold red"}
+
+
+def show_doctor(checks: list[Check], console: Console) -> None:
+    t = Table(title="railmap doctor")
+    for col in ("check", "status", "detail"):
+        t.add_column(col)
+    for c in checks:
+        detail = c.detail + (f"\n[dim]fix: {c.fix}[/]" if c.fix and c.status != "ok" else "")
+        t.add_row(c.name, f"[{DOCTOR_STYLE[c.status]}]{c.status}[/]", detail)
+    console.print(t)

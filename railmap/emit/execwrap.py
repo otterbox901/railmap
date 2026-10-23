@@ -9,6 +9,7 @@ from collections.abc import Mapping
 
 from railmap.emit.env import rank_env
 from railmap.placement.assign import Plan
+from railmap.topology import cpuset
 
 # torchrun, Open MPI, Slurm, MPICH/Intel MPI, MVAPICH
 LOCAL_RANK_VARS = (
@@ -28,14 +29,24 @@ def detect_local_rank(env: Mapping[str, str]) -> int:
 
 
 def build(
-    plan: Plan, cmd: list[str], local_rank: int, env: Mapping[str, str], isolate_gpu: bool
+    plan: Plan,
+    cmd: list[str],
+    local_rank: int,
+    env: Mapping[str, str],
+    isolate_gpu: bool,
+    mems: set[int] | None = None,
 ) -> tuple[list[str], dict, list[int]]:
-    """Return (argv, env, cpus) without side effects, so it can be tested."""
+    """Return (argv, env, cpus) without side effects, so it can be tested. `mems`: NUMA nodes allowed, if known."""
     r = plan.rank(local_rank)
     new_env = {**env, **rank_env(plan, local_rank, isolate_gpu)}
     argv = list(cmd)
     if plan.numa_count > 1 and r.numa >= 0:
-        if shutil.which("numactl"):
+        if mems is not None and r.numa not in mems:
+            print(
+                f"railmap: NUMA node {r.numa} is not in this cgroup's memory nodes; memory is not bound",
+                file=sys.stderr,
+            )
+        elif shutil.which("numactl"):
             argv = ["numactl", f"--membind={r.numa}", *argv]
         else:
             print("railmap: numactl not found; memory is not NUMA-bound", file=sys.stderr)
@@ -44,7 +55,7 @@ def build(
 
 def run(plan: Plan, cmd: list[str], local_rank: int | None = None, isolate_gpu: bool = False) -> None:
     rank = local_rank if local_rank is not None else detect_local_rank(os.environ)
-    argv, env, cpus = build(plan, cmd, rank, os.environ, isolate_gpu)
+    argv, env, cpus = build(plan, cmd, rank, os.environ, isolate_gpu, cpuset.allowed_mems())
     allowed = os.sched_getaffinity(0)
     usable = set(cpus) & allowed
     if usable:

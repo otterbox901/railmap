@@ -151,3 +151,39 @@ def build_azure_vm(root: Path, with_topo_file: bool = True) -> None:
     if with_topo_file:
         (root / "opt/microsoft").mkdir(parents=True)
         shutil.copy(FIXTURES / "azure-ndv5-topo.xml", root / "opt/microsoft/ndv5-topo.xml")
+
+
+def add_cgroup_v2(root: Path, cpus: str, rel: str = "/", at: str | None = None) -> None:
+    """This process sits in cgroup `rel`; `at` (default `rel`) is where cpuset.cpus.effective is visible."""
+    proc = root / "proc/self"
+    proc.mkdir(parents=True, exist_ok=True)
+    (proc / "cgroup").write_text(f"0::{rel}\n")
+    d = root / "sys/fs/cgroup" / (at if at is not None else rel).lstrip("/")
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "cpuset.cpus.effective").write_text(cpus + "\n")
+
+
+def add_cgroup_v1(root: Path, cpus: str, rel: str = "/") -> None:
+    proc = root / "proc/self"
+    proc.mkdir(parents=True, exist_ok=True)
+    (proc / "cgroup").write_text(f"12:memory:{rel}\n5:cpuset:{rel}\n0::/\n")
+    d = root / "sys/fs/cgroup/cpuset" / rel.lstrip("/")
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "cpuset.effective_cpus").write_text(cpus + "\n")
+
+
+def add_mems(root: Path, mems: str) -> None:
+    proc = root / "proc/self"
+    proc.mkdir(parents=True, exist_ok=True)
+    (proc / "status").write_text(f"Name:\tpython\nCpus_allowed_list:\t0-95\nMems_allowed_list:\t{mems}\n")
+
+
+def add_uverbs(root: Path, names: list[str], present: set[str]) -> None:
+    """A verbs device per RDMA device; only those in `present` have a /dev/infiniband node (as in a container)."""
+    (root / "dev/infiniband").mkdir(parents=True, exist_ok=True)
+    for i, name in enumerate(names):
+        d = root / f"sys/class/infiniband_verbs/uverbs{i}"
+        d.mkdir(parents=True)
+        (d / "ibdev").write_text(name + "\n")
+        if name in present:
+            (root / f"dev/infiniband/uverbs{i}").touch()

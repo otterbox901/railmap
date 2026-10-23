@@ -69,7 +69,7 @@ def test_cpus_stay_in_numa_node_and_keep_smt_siblings(tmp_path: Path):
 
 def test_flattened_without_file_warns(tmp_path: Path):
     fakesys.build_azure_vm(tmp_path, with_topo_file=False)
-    plan = assign(discover(root=tmp_path, env={}))
+    plan = assign(discover(root=tmp_path, env={}, bundled_dir=None))
     assert any("virtualized" in w for w in plan.warnings)
 
 

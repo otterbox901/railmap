@@ -1,0 +1,71 @@
+# Two-node torchrun job with railmap binding each rank. Plain Kubernetes (Indexed Job + headless Service), no
+# operator; with Kubeflow's PyTorchJob or JobSet, use the same container command.
+#
+# CPU binding only lands on the GPU's NUMA node if the kubelet gives the pod those cores: run the static CPU manager
+# with the Topology Manager (`single-numa-node` won't fit 8 GPUs; use `restricted` or `best-effort`) and request whole
+# CPUs with requests == limits. railmap plans on the CPUs the container's cgroup allows, and `railmap doctor` shows them.
+apiVersion: v1
+kind: Service
+metadata:
+  name: train
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    job-name: train
+  ports:
+    - name: rendezvous
+      port: 29500
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: train
+spec:
+  completionMode: Indexed
+  completions: 2
+  parallelism: 2
+  backoffLimit: 0
+  template:
+    spec:
+      subdomain: train  # pods resolve as train-0.train, train-1.train
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          image: registry.example.com/team/train:latest  # your image with railmap installed (examples/docker)
+          command: ["torchrun"]
+          args:
+            - --nnodes=2
+            - --nproc-per-node=8
+            - --node-rank=$(JOB_COMPLETION_INDEX)
+            - --master-addr=train-0.train
+            - --master-port=29500
+            - --no-python
+            - railmap
+            - exec
+            - --
+            - python
+            - train.py
+          resources:
+            # Sized for an 8-GPU, 96-vCPU node with ~1.9 TiB RAM (ND H100 v5); leave room for system-reserved.
+            requests:
+              cpu: "88"
+              memory: 1500Gi
+              nvidia.com/gpu: 8
+              rdma/rdma_shared_device_a: 1
+            limits:
+              cpu: "88"
+              memory: 1500Gi
+              nvidia.com/gpu: 8
+              rdma/rdma_shared_device_a: 1
+          securityContext:
+            capabilities:
+              add: ["IPC_LOCK"]
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: dshm  # NCCL and dataloaders need more than the default 64 MiB
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Gi

@@ -1,12 +1,12 @@
 # railmap
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/placement-dark.png">
-  <img alt="railmap ui, placement view: eight ranks on an ND H100 v5, each GPU linked to the NIC behind the same PCIe switch (PIX), with CPUs from the GPU's NUMA node" src="docs/placement-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/otterbox901/railmap/master/docs/placement-dark.png">
+  <img alt="railmap ui, placement view: eight ranks on an ND H100 v5, each GPU linked to the NIC behind the same PCIe switch (PIX), with CPUs from the GPU's NUMA node" src="https://raw.githubusercontent.com/otterbox901/railmap/master/docs/placement-light.png">
 </picture>
 
 <sub><code>railmap ui</code> on the ND H100 v5 test fixture (Azure's published topology file and a simulated VM).
-More views in <a href="docs/ui.md">docs/ui.md</a>.</sub>
+More views in <a href="https://github.com/otterbox901/railmap/blob/master/docs/ui.md">docs/ui.md</a>.</sub>
 
 Places each rank of a multi-GPU job on the right NIC, CPU cores and NUMA memory. Also warns when a collective job
 will open more RDMA connections per NIC than the NIC handles well.
@@ -24,21 +24,35 @@ It targets three gaps in multi-GPU / multi-NIC scaling guidance:
 ## Quick start
 
 ```bash
-uv sync
-uv run railmap plan                         # per-rank GPU, NIC, CPUs, NUMA node
-uv run railmap plan --nodes 128             # ...plus the QP-per-NIC budget for a 128-node all-to-all
+pip install railmap                         # Python 3.10+, in any venv; or: uv tool install railmap
+railmap doctor                              # what this host, container or job step has, and what's missing
+railmap plan                                # per-rank GPU, NIC, CPUs, NUMA node
+railmap plan --nodes 128                    # ...plus the QP-per-NIC budget for a 128-node all-to-all
 torchrun --nproc-per-node 8 --no-python railmap exec -- python train.py   # bind each rank, then exec
-uv run railmap ui                           # the same, as a local web page
+railmap ui                                  # the same, as a local web page
 ```
+
+In a container: `docker run --rm --gpus all --device /dev/infiniband ghcr.io/otterbox901/railmap doctor`. Slurm and
+Kubernetes recipes are in [examples/](https://github.com/otterbox901/railmap/tree/master/examples).
 
 ## Status
 
-Findings are pending the [Azure ND H100 v5 campaign](docs/measurements.md#azure-campaign). Until it measures a NIC,
-the connection budget uses a one-point prior built from the 59% / 3,000 figure.
+Findings are pending the [Azure ND H100 v5 campaign](https://github.com/otterbox901/railmap/blob/master/docs/measurements.md#azure-campaign).
+Until it measures a NIC, the connection budget uses a one-point prior built from the 59% / 3,000 figure.
 
 ## Docs
 
-- [Usage](docs/usage.md): every command, topology sources, job options, and what `exec` sets.
-- [UI](docs/ui.md): the four views of `railmap ui`.
-- [Measurements](docs/measurements.md): the probes and the Azure campaign.
-- [How it works](docs/design.md): path classes, NIC assignment, the QP model, and tests.
+- [Install](https://github.com/otterbox901/railmap/blob/master/docs/install.md): venv, container, Slurm, Kubernetes,
+  and what `doctor` checks.
+- [Usage](https://github.com/otterbox901/railmap/blob/master/docs/usage.md): every command, topology sources, job
+  options, and what `exec` sets.
+- [UI](https://github.com/otterbox901/railmap/blob/master/docs/ui.md): the four views of `railmap ui`.
+- [Measurements](https://github.com/otterbox901/railmap/blob/master/docs/measurements.md): the probes and the Azure
+  campaign.
+- [How it works](https://github.com/otterbox901/railmap/blob/master/docs/design.md): path classes, NIC assignment,
+  the QP model, and tests.
+
+## License
+
+[Apache-2.0](https://github.com/otterbox901/railmap/blob/master/LICENSE). The bundled Azure topology files are MIT,
+from [Azure/azhpc-images](https://github.com/Azure/azhpc-images).

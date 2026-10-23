@@ -21,6 +21,7 @@ finish() {
 trap finish EXIT
 
 mkdir -p "$local_out"
+# shellcheck disable=SC2029  # the paths and IPs expand here on purpose
 ssh "${ssh_opts[@]}" "$ADMIN@${pub[0]}" "bash railmap/infra/azure/remote-campaign.sh $remote_out ${priv[0]} ${priv[1]}" \
   2>&1 | tee "$local_out/campaign.log"
 rsync -az -e "ssh ${ssh_opts[*]}" "$ADMIN@${pub[0]}:$remote_out/" "$local_out/"

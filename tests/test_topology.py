@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from railmap.topology import nccl_xml, sysfs
-from railmap.topology.discover import discover, placement_nics
+from railmap.topology.discover import BUNDLED_TOPO_DIR, discover, placement_nics
 from railmap.topology.model import PathClass, Topology, classify, format_cpulist, parse_cpulist
 from tests import fakesys
 
@@ -60,11 +60,32 @@ def test_flattened_vm_uses_vendor_file(tmp_path: Path):
 
 def test_flattened_vm_without_file_warns(tmp_path: Path):
     fakesys.build_azure_vm(tmp_path, with_topo_file=False)
-    topo = discover(root=tmp_path, env={})
+    topo = discover(root=tmp_path, env={}, bundled_dir=None)
     assert topo.flattened and topo.topo_file is None
     assert topo.warnings()
     # Without the file every GPU-NIC pair looks equally far, which is the failure this guards against.
     assert {topo.path(topo.gpus[0], n) for n in topo.nics if n.numa == 0} == {PathClass.NODE}
+
+
+def test_flattened_vm_falls_back_to_bundled_copy(tmp_path: Path):
+    # A container on an ND H100 v5 sees the host's sysfs but not its /opt/microsoft.
+    fakesys.build_azure_vm(tmp_path, with_topo_file=False)
+    topo = discover(root=tmp_path, env={})
+    assert topo.topo_file == str(BUNDLED_TOPO_DIR / "ndv5-topo.xml")
+    assert topo.warnings() == []
+    assert any("railmap's copy of ndv5-topo.xml" in n for n in topo.notes)
+    assert all(topo.path(g, topo.nics[g.index]) is PathClass.PIX for g in topo.gpus)
+
+
+def test_host_vendor_file_beats_bundled_copy(tmp_path: Path):
+    fakesys.build_azure_vm(tmp_path)
+    assert discover(root=tmp_path, env={}).topo_file == str(tmp_path / "opt/microsoft/ndv5-topo.xml")
+
+
+def test_bundled_files_match_upstream_layouts():
+    assert nccl_xml.parse(BUNDLED_TOPO_DIR / "ndv5-topo.xml").gpus == nccl_xml.parse(AZURE_XML).gpus
+    ndv4 = nccl_xml.parse(BUNDLED_TOPO_DIR / "ndv4-topo.xml")
+    assert len(ndv4.gpus) == 8 and len(ndv4.nics) == 8 and [n.id for n in ndv4.numa_nodes] == [0, 1, 2, 3]
 
 
 def test_env_topo_file_wins(tmp_path: Path):

@@ -1,0 +1,95 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv run --frozen ruff check
+      - run: uv run --frozen ruff format --check
+      - name: shellcheck
+        run: shellcheck --external-sources scripts/*.sh infra/azure/*.sh examples/slurm/*.sbatch
+
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv run --frozen --python ${{ matrix.python }} pytest
+
+  lowest-deps:
+    # The dependency floors in pyproject.toml are real: the oldest allowed versions pass on the oldest Python.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv venv --python 3.10
+      - run: uv pip install --resolution lowest-direct -e . "pytest>=8"
+      - run: .venv/bin/python -m pytest
+
+  package:
+    # Build once, then install the wheel the way most users will: plain venv + pip, no uv.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv build
+      - run: uvx twine check --strict dist/*
+      - name: install the wheel with pip into a clean venv
+        run: |
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install dist/*.whl
+      - run: SMOKE_UI=1 scripts/smoke.sh /tmp/venv/bin/railmap
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  container:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: railmap:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: smoke test
+        run: FIXTURES=/f scripts/smoke.sh docker run --rm -v "$PWD/tests/fixtures:/f:ro" railmap:ci
+      - name: doctor inside a CPU-limited container reports the limit
+        run: |
+          docker run --rm --cpuset-cpus=0 railmap:ci doctor --json > doctor.json || [ $? -eq 1 ]
+          python3 -c 'import json; c = {x["name"]: x for x in json.load(open("doctor.json"))}; print(c["CPUs"]); assert c["CPUs"]["detail"].startswith("1 of ")'
+      - name: tools are in the image
+        run: docker run --rm --entrypoint sh railmap:ci -c 'ib_write_bw --help | grep -q use_cuda && which rdma numactl ibv_devinfo'
+
+  manifests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: kubeconform
+        run: |
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz \
+            | tar -xz -C /usr/local/bin kubeconform
+          kubeconform -strict -summary examples/kubernetes/*.yaml

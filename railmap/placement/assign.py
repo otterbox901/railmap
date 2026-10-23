@@ -159,6 +159,10 @@ def assign(topo: Topology, ranks: int | None = None, variant: str = "best") -> P
     for numa in sorted(set(rank_numa.values())):
         members = [i for i, n in rank_numa.items() if n == numa]
         groups = _core_groups(topo, topo.cpus_of(numa))
+        if not groups:
+            # Its CPUs are all outside the cgroup: run near nothing rather than on CPUs the ranks may not use.
+            warnings.append(f"NUMA node {numa}: no usable CPUs; its ranks share every usable CPU")
+            groups = _core_groups(topo, topo.cpus_of(-1))
         if len(groups) < len(members):
             warnings.append(f"NUMA node {numa}: {len(members)} ranks share {len(groups)} cores")
             for i in members:

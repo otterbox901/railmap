@@ -143,3 +143,13 @@ def scan(root: Path = Path("/")) -> Topology:
         flattened=flat_g or flat_n,
     )
     return topo
+
+
+def uverbs_devices(root: Path = Path("/")) -> dict[str, bool]:
+    """RDMA device name -> whether its /dev/infiniband/uverbsN node exists here (a container may get only some)."""
+    out: dict[str, bool] = {}
+    for d in sorted((root / "sys/class/infiniband_verbs").glob("uverbs*")):
+        name = _read(d / "ibdev")
+        if name:
+            out[name] = (root / "dev/infiniband" / d.name).exists()
+    return out

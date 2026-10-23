@@ -27,6 +27,7 @@ for ip in "${pub[@]}"; do
   ssh "${ssh_opts[@]}" "$ADMIN@$ip" 'cat >>~/.ssh/authorized_keys' <"$STATE_DIR/node0.pub"
 done
 for p in "${priv[@]}"; do
+  # shellcheck disable=SC2029  # $p expands here on purpose
   ssh "${ssh_opts[@]}" "$ADMIN@${pub[0]}" "ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes $p hostname"
 done
 echo "bootstrap done"

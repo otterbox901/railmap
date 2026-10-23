@@ -1,12 +1,12 @@
 # Usage
 
 ```bash
-uv sync
-uv run railmap show                         # GPU x NIC path classes, NICs, NUMA nodes
-uv run railmap plan                         # per-rank GPU, NIC, CPUs, NUMA node
-uv run railmap plan --nodes 128             # ...plus the QP-per-NIC budget for a 128-node all-to-all
-uv run railmap env --local-rank 3           # env vars for one rank
-uv run railmap env --local-rank 0 --format slurm   # srun --cpu-bind mask for all ranks
+railmap doctor                              # what this host, container or job step has, and what's missing
+railmap show                                # GPU x NIC path classes, NICs, NUMA nodes
+railmap plan                                # per-rank GPU, NIC, CPUs, NUMA node
+railmap plan --nodes 128                    # ...plus the QP-per-NIC budget for a 128-node all-to-all
+railmap env --local-rank 3                  # env vars for one rank
+railmap env --local-rank 0 --format slurm   # srun --cpu-bind mask for all ranks
 torchrun --nproc-per-node 8 --no-python railmap exec -- python train.py   # bind each rank, then exec
 mpirun -np 16 -H a:8,b:8 --bind-to none railmap exec -- alltoall_perf -b 8 -e 1G
 ```
@@ -14,8 +14,12 @@ mpirun -np 16 -H a:8,b:8 --bind-to none railmap exec -- alltoall_perf -b 8 -e 1G
 ## Topology sources
 
 On an Azure HPC image, railmap uses `/opt/microsoft/*topo*.xml` automatically when it detects the virtualized PCI
-tree. Pass `--topo-file` to use another NCCL topology XML (`NCCL_TOPO_FILE` is also honoured). To plan offline for
-another machine, use `show --save topo.json` there, then `plan --snapshot topo.json` here.
+tree. Without that file (other images, containers), it uses its bundled copies for ND A100 v4 and ND H100 v5 when the
+GPU addresses match. Pass `--topo-file` to use another NCCL topology XML (`NCCL_TOPO_FILE` is also honoured). To plan
+offline for another machine, use `show --save topo.json` there, then `plan --snapshot topo.json` here.
+
+On the live host, `show`, `plan`, `env`, `exec` and `ui` plan only on the GPUs, NICs and CPUs this process was given
+(see [Install](install.md#what-railmap-sees-in-a-container-or-job-step)); `--all-cpus` turns off the CPU part.
 
 ## Job options
 

@@ -12,6 +12,7 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
+from railmap import doctor as doctormod
 from railmap.emit import env as envmod
 from railmap.emit import execwrap, report
 from railmap.placement import budget as budgetmod
@@ -26,7 +27,7 @@ from railmap.topology.discover import discover, placement_nics
 from railmap.topology.model import Topology
 from railmap.ui import server as uiserver
 
-app = typer.Typer(no_args_is_help=True, add_completion=False, help=__doc__)
+app = typer.Typer(no_args_is_help=True, add_completion=False)
 console = Console()
 
 TopoFile = Annotated[
@@ -34,16 +35,43 @@ TopoFile = Annotated[
 ]
 Snapshot = Annotated[Path | None, typer.Option("--snapshot", help="topology JSON saved with `show --save`")]
 PlanFile = Annotated[Path | None, typer.Option("--plan", help="plan JSON from `plan -o`; computed live if omitted")]
+AllCpus = Annotated[
+    bool, typer.Option("--all-cpus", help="plan on every CPU of the host, not just the ones this cgroup allows")
+]
 
 
-def _topology(topo_file: Path | None, snapshot: Path | None) -> Topology:
-    return discover(topo_file=topo_file, snapshot=snapshot)
+def _topology(topo_file: Path | None, snapshot: Path | None, all_cpus: bool = False) -> Topology:
+    return discover(topo_file=topo_file, snapshot=snapshot, all_cpus=all_cpus)
 
 
-def _plan(plan_file: Path | None, topo_file: Path | None, snapshot: Path | None, variant: str = "best") -> Plan:
+def _plan(
+    plan_file: Path | None,
+    topo_file: Path | None,
+    snapshot: Path | None,
+    variant: str = "best",
+    all_cpus: bool = False,
+) -> Plan:
     if plan_file:
         return Plan.load(plan_file)
-    return assign(_topology(topo_file, snapshot), variant=variant)
+    return assign(_topology(topo_file, snapshot, all_cpus), variant=variant)
+
+
+def _version(value: bool) -> None:
+    if value:
+        print(f"railmap {doctormod.version()}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: Annotated[
+        bool, typer.Option("--version", callback=_version, is_eager=True, help="print the version and exit")
+    ] = False,
+) -> None:
+    """GPU-NIC-CPU placement and RDMA connection-budget planner for multi-GPU nodes.
+
+    Start with `railmap doctor` on a new host, container or job step, then `railmap plan`.
+    """
 
 
 @app.command()
@@ -52,9 +80,10 @@ def show(
     snapshot: Snapshot = None,
     save: Annotated[Path | None, typer.Option(help="write the topology as JSON")] = None,
     as_json: Annotated[bool, typer.Option("--json", help="print JSON instead of tables")] = False,
+    all_cpus: AllCpus = False,
 ) -> None:
     """Show GPUs, RDMA NICs, NUMA nodes and the PCI path class between each GPU and NIC."""
-    topo = _topology(topo_file, snapshot)
+    topo = _topology(topo_file, snapshot, all_cpus)
     if save:
         topo.save(save)
     if as_json:
@@ -82,9 +111,10 @@ def plan(
     rail_only: Annotated[bool, typer.Option(help="hierarchical all-to-all (same-rail RDMA + NVLink)")] = False,
     profile: Annotated[Path | None, typer.Option(help="NIC calibration profile JSON")] = None,
     as_json: Annotated[bool, typer.Option("--json", help="print JSON instead of tables")] = False,
+    all_cpus: AllCpus = False,
 ) -> None:
     """Assign each local rank a GPU, NIC(s), CPUs and NUMA node; with --nodes, check the QP budget."""
-    topo = _topology(topo_file, snapshot)
+    topo = _topology(topo_file, snapshot, all_cpus)
     p = assign(topo, ranks=ranks, variant=variant)
     if output:
         p.save(output)
@@ -124,9 +154,10 @@ def env(
     snapshot: Snapshot = None,
     fmt: Annotated[str, typer.Option("--format", help="sh (exports) or slurm (srun --cpu-bind flag)")] = "sh",
     isolate_gpu: Annotated[bool, typer.Option(help="also set CUDA_VISIBLE_DEVICES to the rank's GPU")] = False,
+    all_cpus: AllCpus = False,
 ) -> None:
     """Print the environment for one local rank, or the srun CPU binding for all ranks."""
-    p = _plan(plan_file, topo_file, snapshot)
+    p = _plan(plan_file, topo_file, snapshot, all_cpus=all_cpus)
     if fmt == "slurm":
         print(envmod.slurm_cpu_bind(p))
     elif fmt == "sh":
@@ -144,9 +175,10 @@ def exec_(
     variant: Annotated[str, typer.Option(help="used when no --plan is given")] = "best",
     local_rank: Annotated[int | None, typer.Option(help="default: from LOCAL_RANK, OMPI_..., SLURM_LOCALID")] = None,
     isolate_gpu: Annotated[bool, typer.Option(help="also set CUDA_VISIBLE_DEVICES to the rank's GPU")] = False,
+    all_cpus: AllCpus = False,
 ) -> None:
     """Bind this rank's CPUs, memory and env per the plan, then exec CMD. Use under torchrun/mpirun/srun."""
-    execwrap.run(_plan(plan_file, topo_file, snapshot, variant), cmd, local_rank, isolate_gpu)
+    execwrap.run(_plan(plan_file, topo_file, snapshot, variant, all_cpus), cmd, local_rank, isolate_gpu)
 
 
 @app.command()
@@ -275,9 +307,26 @@ def ui(
     host: Annotated[str, typer.Option(help="address to listen on")] = "127.0.0.1",
     port: Annotated[int, typer.Option(help="port to listen on (0: any free port)")] = 8765,
     open_browser: Annotated[bool, typer.Option("--open/--no-open", help="open a browser tab")] = True,
+    all_cpus: AllCpus = False,
 ) -> None:
     """Serve a local web page: topology, placement, connection budget and campaign results."""
-    uiserver.serve(uiserver.State(_topology(topo_file, snapshot), results, profile), host, port, open_browser)
+    topo = _topology(topo_file, snapshot, all_cpus)
+    uiserver.serve(uiserver.State(topo, results, profile), host, port, open_browser)
+
+
+@app.command()
+def doctor(
+    topo_file: TopoFile = None,
+    as_json: Annotated[bool, typer.Option("--json", help="print JSON instead of a table")] = False,
+) -> None:
+    """Check this host, container or job step: GPUs, RDMA devices, topology source, cgroup CPUs, memlock, tools."""
+    checks = doctormod.run(topo_file=topo_file)
+    if as_json:
+        print(json.dumps([asdict(c) for c in checks], indent=2))
+    else:
+        report.show_doctor(checks, console)
+    if any(c.status == doctormod.FAIL for c in checks):
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

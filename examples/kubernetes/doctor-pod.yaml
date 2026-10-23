@@ -1,0 +1,30 @@
+# Run `railmap doctor` on one GPU node, then read the result:
+#   kubectl apply -f examples/kubernetes/doctor-pod.yaml
+#   kubectl logs -f railmap-doctor
+# Needs the NVIDIA GPU Operator (nvidia.com/gpu) and Network Operator (an RDMA resource; the name below is the shared
+# device plugin's default, adjust it to your cluster). Change `args` to ["plan"] or ["show"] for the layout itself.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: railmap-doctor
+spec:
+  restartPolicy: Never
+  containers:
+    - name: railmap
+      image: ghcr.io/otterbox901/railmap:latest
+      args: ["doctor"]
+      resources:
+        # Requests equal to limits (Guaranteed QoS). Ask for all GPUs to see the whole node's placement.
+        requests:
+          cpu: "2"
+          memory: 4Gi
+          nvidia.com/gpu: 8
+          rdma/rdma_shared_device_a: 1
+        limits:
+          cpu: "2"
+          memory: 4Gi
+          nvidia.com/gpu: 8
+          rdma/rdma_shared_device_a: 1
+      securityContext:
+        capabilities:
+          add: ["IPC_LOCK"]  # RDMA memory registration

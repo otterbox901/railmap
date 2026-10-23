@@ -144,7 +144,9 @@ def check_topology(topo: Topology) -> Check:
 
 
 def check_cpus(root: Path, topo: Topology) -> Check:
-    online = parse_cpulist(_read(root / "sys/devices/system/cpu/online")) or list(range(os.cpu_count() or 1))
+    online = parse_cpulist(_read(root / "sys/devices/system/cpu/online")) or sorted(
+        c for n in sysfs.scan_numa(root) for c in n.cpus
+    )
     allowed = cpuset.allowed_cpus(root)
     if allowed is None:
         return Check("CPUs", OK, f"{len(online)} online; no cpuset limit found")

@@ -7,7 +7,7 @@ constraints are fixed so far; see Open questions).
 
 Anyone can install railmap on a cloud GPU node and have it work: in a plain venv, in a container, or under Slurm or
 Kubernetes. It should be packaged, licensed and tested well enough to make public on GitHub and PyPI. Once the build
-is done, an Azure campaign within the budget replaces the docs' "findings pending" with measured numbers.
+is done, an Azure campaign replaces the docs' "findings pending" with measured numbers.
 
 ## Non-goals
 
@@ -179,11 +179,11 @@ is done, an Azure campaign within the budget replaces the docs' "findings pendin
 
 ## Open questions
 
-- **Measure phase plan, under a $250 Azure hard cap.** Unknowns:
+- **Measure phase plan.** Unknowns:
   - the subscription's offer type and GPU/HB quota (free-trial and VS credits can't run GPU VMs);
-  - which SKUs fit the budget. The staged HBv4 → 1× ND H100 v5 → 2× ND H100 v5 plan doesn't fit: ND H100 v5 is about
-    $98 per VM-hour. Candidates are an HBv4 pair (CX-7 knee) plus 2× ND A100 v4, or a single ND H100 v5 node;
-  - a spend guard that deletes the resource group at the cap;
+  - which SKUs to use. ND H100 v5 is about $98 per VM-hour, so the staged HBv4 → 1× ND H100 v5 → 2× ND H100 v5 plan
+    is expensive. Cheaper candidates are an HBv4 pair (CX-7 knee) plus 2× ND A100 v4, or a single ND H100 v5 node;
+  - a spend guard that deletes the resource group once spending passes a set limit;
   - the `az` CLI, which isn't installed locally.
 - **When to go public:** right after the build phase, or only once measured results are in the docs (the public bar
   includes "measured results in docs").
